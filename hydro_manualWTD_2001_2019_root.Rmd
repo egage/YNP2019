@@ -1,14 +1,16 @@
 ---
 title: "Manual Water Table - Data Processing Report"
 output:
-  html_document: default
+  html_document: 
+    theme: journal
+    toc: yes
   word_document: default
 ---
 
 ```{r setup, include=FALSE}
 # knitr::opts_chunk$set(echo = TRUE)
 library(knitr)
-opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = 'center')
+opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'center')
 # opts_knit$set(root.dir=normalizePath('../')) # this is required if Rmd is nested below the project directory
 
 # opts_chunk$set(fig.path = "../output/figures/") # corrected path and added dev. Needed to specify a subdirectory for figs
@@ -21,23 +23,17 @@ opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = 'cent
 
 This document describes data import, wrangling, and merging of manual well measurments collected over the project lifetime. Three primary datasets are processed: 
 
-1. Manual well measurement data archived on the "Digital Collections of Colorado" (DCC) library site:
-
-[Well Measurement Data 2001 - 2015](https://dspace.library.colostate.edu/handle/10217/176158)
-
-The assumption was that the DCC data set represents the canonical version of the water table data, to which updates from 2015-2019 should be added. However, there are errors in the DCC repository that also need to be addressed before attempting to update with more recent data.
+1. Manual well measurement data archived on the "Digital Collections of Colorado" (DCC) library site: [Well Measurement Data 2001 - 2015](https://dspace.library.colostate.edu/handle/10217/176158). The assumption was that the DCC data set represents the canonical version of the water table data, to which updates from 2015-2019 should be added. However, there are errors in the DCC repository that also need to be addressed before attempting to update with more recent data.
 
 2. 2015-2017 data collected by D. Kotter
 
 3. 2018-2019 data collected by L. Messner
-
 
 As part of processing, data were evaluted for: 
 
 * Inconsistently named factors such as site name or well ID    
 * Missing values  
 * Data values outside of expected range or showing unusual patterns
-
 
 
 ```{r,echo=FALSE}
@@ -72,12 +68,9 @@ library(gt)
 
 ```
 
-## Data Import and Initial Assessment
+## Data Import and Initial Processing
 
 ### 2001-2014 (DCC Collection)
-
-
-**Exploratory analyses**
 
 ```{r, message=FALSE, warning=FALSE}
 wt.nsf <- read_tsv("data/NSF_DataArchive20180208/Well_measurement_data2001-2015/Yell_Well_Data_Manual2001_2015.txt")
@@ -88,24 +81,28 @@ wt.nsf.meta <- wt.nsf.meta %>%
 
 ```
 
-**Field names from metadata file on DCC repository site**
 
-This is a direct reading of the metadata file in the DCC site.
 
 ```{r, warning=FALSE}
-wt.nsf.meta %>%
-  gt()
+# **Field names from metadata file on DCC repository site**
+# 
+# This is a direct reading of the metadata file in the DCC site.
+# wt.nsf.meta %>%
+#   gt()
 
 ```
 
-**Comparison of missing values among fields (_missing_)**
 
 ```{r}
+# **Comparison of missing values among fields (_missing_)**
 # Make "Wat_ID" a character, convert "Date" to from char to date format...
 wt.nsf <- wt.nsf %>% 
   # mutate(Wat_ID = as.character(Wat_ID)) %>% 
   mutate(Date = lubridate::mdy(Date))
 
+```
+
+```{r, eval=FALSE}
 # use some functions in skimr pkg to evaluate missing values.
 s1 <- skimr::skim(wt.nsf)
 s1
@@ -122,9 +119,6 @@ visdat::vis_dat(wt.nsf)
 
 ```
 
-
-  
-
 ```{r, eval=FALSE}
 # > **Questions/Issues:**    
 # > 1. There are different levels of "missingness" between fields. Fields such as "abslevel", "JULIAN_DAY" have the most missing values, but other fields also have issues...     
@@ -138,10 +132,7 @@ wt.nsf %>%
 
 ```
 
-
 ```{r, eval= FALSE}
-
-
 # **Count of observations: Site2**
 ## distinct "Site2"
 wt.nsf %>%
@@ -153,8 +144,6 @@ wt.nsf %>%
 # > 2. "eb2" should be converted to "EB2"; "eb1" should be converted to "EB1"
 
 ```
-
-
 
 ```{r, eval=FALSE}
 
@@ -170,13 +159,13 @@ wt.nsf %>%
 
 ```
 
-**Some cross-tabulations...**
 
-The following cross-tabulations are meant to provide some insights into data structure and diagnose potential problems. 
 
 
 ```{r, eval = FALSE}
-
+# **Some cross-tabulations...**
+# 
+# The following cross-tabulations are meant to provide some insights into data structure and diagnose potential problems. 
 # ** cross-tabulation: Site vs. Plot**
 
 wt.nsf %>% 
@@ -189,9 +178,6 @@ wt.nsf %>%
 # > 3. What is "EB1NA" referring to?    
 
 ```
-
-     
-
 
 ```{r, eval=FALSE}
 
@@ -206,8 +192,6 @@ wt.nsf %>%
 # > 3. Similar issue as noted above regarding the null and NA values. 
 
 ```
-   
-
 
 ```{r, eval=FALSE}
 
@@ -222,7 +206,6 @@ wt.nsf %>%
 
 ```
 
-
 ```{r, eval=FALSE}
 
 # ** cross-tabulation: Wat_ID2 vs. Year**
@@ -234,9 +217,6 @@ wt.nsf %>%
 # > 1. "1900" data...  
 # > 2. The use of site and well IDs seem wonky in places. Can these be tied to field books? What should be considered "canonical"?   
 ```
-
-
-
 
 ```{r, eval = FALSE}
 
@@ -251,10 +231,7 @@ wt.nsf %>%
 
 ```
 
-
-
 ```{r, eval=FALSE}
-
 
 # **Count of observations by Wat_ID2, Site2, and Date**
 # x.d <- wt.nsf %>% 
@@ -271,7 +248,6 @@ wt.nsf %>%
 
 ```
 
-
 ```{r, eval=FALSE}
 # **Distinct Wat_ID2** 
 # distinct wat_ID2
@@ -283,208 +259,6 @@ wt.nsf %>%
 
 ```
 
-#### Graphical crap detection
-**Heat map: count of observations by "Wat_ID2" and "Site2"**
-
-```{r, fig.height=24, fig.width=9}
-
-wt.nsf %>% 
-  # names()
-  tabyl(Wat_ID2,Site2) %>%
-  gather(key = Site2,value = cnt,-Wat_ID2) %>% 
-  ggplot(aes(Site2,Wat_ID2)) +
-  geom_tile(aes(fill=cnt), color="grey") +
-  # scale_fill_gradient(low = "white", high = "darkred") +
-  scale_fill_gradient2(low = "white", mid = "blue", high = "red", midpoint = 45, space = "Lab", na.value = "grey50", guide = "colourbar") +
-  # scale_fill_viridis() +
-  theme_bw() +
-  theme(axis.text.x=element_text(angle=45, hjust=1))
-
-```
-
-> **Questions/Issues:**    
-> 1. Note NA values. Figure out which sites and decide whether to keep or drop...     
-> 2. Check what's up with "Eunlabeled". Can this be recovered as valid data or does it need to be dropped?   
-> 3. What's the significance of the hyphenated ID's (e.g., O47-1 and O47-2)?    
-> 4. Does the pattern of "missingness" match expectations?    
-
-**Heat map: count of observations by Wat_ID2 and year EXCLUDING the data labelled with Year<2001**
-
-```{r, fig.height=24, fig.width=9}
-# s1
-wt.nsf %>% 
-  group_by(Wat_ID2, Year) %>%
-  summarise(cnt = n()) %>%
-  filter(Year>2000) %>% 
-  ggplot(aes(Year, Wat_ID2)) +
-  geom_tile(aes(fill=cnt), color='white') +
-  scale_fill_viridis() +
-  theme_bw() +
-  labs(y="") +
-  theme(axis.text.x=element_text(angle=45, hjust=1))
-
-# > **Questions/Issues:**    
-# > 1. Note the missing 2007 data.     
-# > 2. How does the pattern of "missingness" match expectations?  
-
-```
-
-  
-
-```{r, fig.height=30, fig.width=9, eval=FALSE}
-
-# **"E" wells/staff gauges -- jitter plots**
-# exp plots - box plot
-# wt.nsf %>% 
-#   group_by(Wat_ID2) %>%
-#   mutate(cnt.WatID = n()) %>%
-#   filter(Year>2000) %>%
-#   mutate(Year = as.character(Year)) %>%
-#   filter(str_detect(Wat_ID2, "E")) %>% 
-#   # filter(cnt.WatID > 3 & rellevel < 999) %>% 
-#   # ggplot(aes(Date,rellevel)) +
-#   ggplot(aes(Year,rellevel)) + 
-#   geom_boxplot(aes(group=Year)) +
-#   facet_wrap(~Wat_ID2, ncol=5, scales = "free") +
-#   theme(axis.text.x=element_text(angle=45, hjust=1))
-
-## exp wells - jitter
-wt.nsf %>% 
-  group_by(Wat_ID2) %>%
-  mutate(cnt.WatID = n()) %>%
-  filter(Year>2000) %>%
-  mutate(Year = as.character(Year)) %>%
-  filter(str_detect(Wat_ID2, "E")) %>% 
-  # filter(cnt.WatID > 3 & rellevel < 999) %>% 
-  # ggplot(aes(Date,rellevel)) +
-  ggplot(aes(Year,rellevel)) + 
-  geom_jitter(width = 0.15, height = 0.15, aes(color = Year)) +
-  # geom_point(color="darkblue", alpha=0.1,position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.2)) +
-  # geom_boxplot(aes(group=Year)) +
-  theme_minimal() +
-  theme(legend.position = "none") +
-  facet_wrap(~Wat_ID2, ncol=4, scales = "free") +
-  theme(axis.text.x = element_text(face="bold", color="black", 
-                           size=7, angle=75, hjust = 1))
-
-# > **Questions/Issues:**    
-# > 1. Seem to be a fairly large number of questionable values. Individual outliers need to be examined more closely (e.g., E199 in 2013, E2 in 2011, etc.). Are these data entry errors, artifacts from the rescaling process, ??          
-# > 2. Issues with some specific wells/gauges more clearly seem to be related to the rescaling (e.g., E25)   
-# > 3. What's with the wells with more limited records (e.g., E300 has only two years of data. Why? Was this installed for a specific and limited purpose or is this an issue with well IDs?)  
-
-```
-
-
-```{r, fig.height=28, fig.width=9, eval=FALSE}
-
-# ** "O" wells/staff gauges -- jitter plots**
-
-## obs wells - jitter
-wt.nsf %>% 
-  group_by(Wat_ID2) %>%
-  mutate(cnt.WatID = n()) %>%
-  filter(Year>2000) %>%
-  mutate(Year = as.character(Year)) %>%
-  filter(str_detect(Wat_ID2, "O")) %>% 
-  # filter(cnt.WatID > 3 & rellevel < 999) %>% 
-  # ggplot(aes(Date,rellevel)) +
-  ggplot(aes(Year,rellevel)) + 
-  geom_jitter(width = 0.15, height = 0.15, aes(color = Year)) +
-  # geom_point(color="darkblue", alpha=0.1,position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.2)) +
-  # geom_boxplot(aes(group=Year)) +
-  theme_minimal() +
-  theme(legend.position = "none") +
-  facet_wrap(~Wat_ID2, ncol=5, scales = "free") +
-  theme(axis.text.x = element_text(face="bold", color="black", 
-                           size=7, angle=75, hjust = 1))
-
-# > **Questions/Issues:**    
-# > 1. Seem to be a fairly large number of questionable values. Individual outliers need to be examined more closely (e.g., O1 in 2013, O10 in 2014, O11 in 2014). Are these data entry errors, artifacts from the relativization process, ??     
-# > 2. Issues with some specific wells/gauges more clearly seem to be related to the rescaling (e.g., O200, O21_2)  
-# > 3. Why do some wells have such short records? I'm assuming some might be new (e.g., O122, which has observations only in 2014), but then there are the issues of wells/gauges that blink in and out. For example:ODP1 (2013 only), O42 (2008-2011), etc. **Have well numbers been changed over the duration of the study?**
-```
-
-#### Spatial plotting of the 2001-2015 DCC well data set
-
-```{r, echo=FALSE, eval=FALSE}
-
-# create sf bject from coordinates. [Note: doesn't work b/c of missing x,y data]
-# wt.nsf.sf <- st_as_sf(x = wt.nsf,
-#                       coords = c("Y","X"),
-#                       crs = "+proj=utm +zone=12 +ellps=GRS80 +datum=NAD83 +units=m +no_defs")
-
-```
-
-Create a sf representation of the wells/staff gauges from coordinates and plot.
-
-* Note: Received the following error: _"Error in st_as_sf.data.frame(x = wt.nsf, coords = c("Y", "X"), crs = "+proj=utm +zone=12 +ellps=GRS80 +datum=NAD83 +units=m +no_defs") : 
-  missing values in coordinates not allowed"_   
-* Inspection of the full data set found 71 records with missing x,y,z values.  
-* Some records also have bogus coordinates (e.g., "999")
-  
-```{r}
-## find missing
-wt.nsf %>% 
-  filter(is.na(X) | is.na(Y) | X == "999" | Y == "999") %>%
-  datatable(caption = "Records with missing/bogus x or y coordinates.")
-
-```
-
-
-```{r}
-# create sf object from coordinates. This time, filtering out records with missing x,y
-wt.nsf.sf <- wt.nsf %>% 
-  filter(!is.na(X)) %>% 
-  filter(!is.na(Y)) %>% 
-  filter(X != "999") %>% 
-  st_as_sf(.,
-           coords = c("X","Y"),
-           crs = "+proj=utm +zone=12 +ellps=GRS80 +datum=NAD83 +units=m +no_defs")
-
-```
-
-
-```{r, eval = FALSE, fig.align="center"}
-# ** Map of wells/gauges from DCC dataset**
-# 
-# _Note: Records with missing/bogus coordinates removed._
-## opentopo
-# mapview(wt.nsf.sf,map.types = "OpenTopoMap", zcol = "Wat_ID2", alpha = 0.12, legend = FALSE)
-
-## opentopo + imagery options
-mapview(wt.nsf.sf, map.types = c("OpenTopoMap","Esri.WorldImagery"), zcol = "Wat_ID2", alpha = 0.12, legend = FALSE)
-
-
-```
-
-
-```{r, eval = FALSE}
-
-# ** Locations of Sites/wells with records with a date of "1/1/1900"**
-
-## Locations of the "1900" values
-wt.nsf.sf %>%
-  filter(Year == "1900") %>%
-  mapview(., map.types = c("OpenTopoMap","Esri.WorldImagery"), zcol = "Wat_ID2", alpha = 0.12, legend = FALSE)
-
-# Seem to be scattered widely...
-
-```
-
-
-```{r, eval=FALSE}
-
-# ** Sites/wells with records with a date of "1/1/1900"**
-wt.nsf %>%
-  filter(Year <= 2000) %>% 
-  select(1:4,Site_Typ,Wat_ID2,Wat_Type) %>% 
-  datatable()
-
-# These need to be fixed...
-
-```
-
-
 ```{r, eval=FALSE, echo=FALSE}
 
 #### Hunting for duplicates
@@ -495,11 +269,10 @@ wt.nsf %>%
 ```
 
 
-#### Data cleaning
 
 
 ```{r, eval=FALSE}
-
+#### Data cleaning
 # **Task: Make encoding of Site2 consistent**
 # 
 # The site and site2 fields differ in how they encode treatments. "Site" explicitly encodes treatments (e.g., DC, DX, etc.); "Site2" leaves these out. BUT, not consistent...
@@ -591,7 +364,7 @@ wt.nsf <- wt.nsf %>%
 
 
 
-```{r}
+```{r, eval=FALSE}
 ### Site has records with NA in the name.
 # distinct site
 # wt.nsf %>% 
@@ -602,8 +375,6 @@ wt.nsf %>%
   filter(str_detect(Site, "NA$")) # filters all the records ending in "NA"
 
 ```
-
-
 
 ```{r}
 # reclass the DCC well data from earlier
@@ -712,16 +483,22 @@ wt.nsf <- wt.nsf %>%
 
 ```
 
-##### Lower case
-A problem that emerges when looking at other files (e.g., 2015-2017 DKotter-era data, 2018 data) is the inconsistent use of case. Moving forward, all character strings in site names or the like will be converted to LOWER CASE. 
+
 
 ```{r}
+#### Convert to lower case
+# A problem that emerges when looking at other files (e.g., 2015-2017 DKotter-era data, 2018 data) is the inconsistent use of case. Moving forward, all character strings in site names or the like will be converted to LOWER CASE. 
+
 ## change case of ALL character strings to lower. 
 wt.nsf <- wt.nsf %>% 
   mutate_if(.predicate = is.character,.funs=tolower)
 
 wt.nsf <- wt.nsf %>% 
   filter(!is.na(wat_id))
+
+## note: no su or raw wtd are in the omport file, but I'm creating su_cm and wtd_cm to match 2018 data
+wt.nsf <- wt.nsf %>% 
+  mutate(su_cm = "NA", dtw_cm = "NA")
 
 # wt.nsf %>% 
 #   tabyl(site) %>% 
@@ -731,19 +508,20 @@ wt.nsf <- wt.nsf %>%
 #   filter(stringr::str_detect(site, "fl")) %>% 
 #   distinct(wat_id) %>% 
 #   gt()
-# 
-# wt.nsf %>% 
-#   filter(wat_id == '171' & site2 == "elk")
+
 
 ```
 
 ### 2015-2017 Data
 
-Files were sourced from D. Kotter's Google Drive. These appear to be the 2015 to 2017 manual well data, although it's unclear what files are most complete because there are multiple files containing manual measurements. 
+```{r}
+# Files were sourced from D. Kotter's Google Drive. These appear to be the 2015 to 2017 manual well data, although it's unclear what files are most complete because there are multiple files containing manual measurements. 
+# 
+# **Source file uploaded on 20181022 to Google Team Drive:** https://drive.google.com/drive/u/1/folders/15F7-felMcqAWp1PCgU_Mukpf7LDvlpAM?ogsrc=32
 
-**Source file uploaded on 20181022 to Google Team Drive:** https://drive.google.com/drive/u/1/folders/15F7-felMcqAWp1PCgU_Mukpf7LDvlpAM?ogsrc=32
+```
 
-Two separate source files contain WT measurements. These are:
+Two separate source files contain WT measurements:
 
 1. WTmeasurements.xlsx -- This file has garbage dates for some dates (e.g., 5/?/2015), which prevent parsing on import and make the data unplotable/unanalyzable. After a copy of the raw file was made (WTmeasurements - raw.xlsx), the original file was modified by creating a new date column (date_guess) in which dates were manually corrected, or where to dates included a "?", a provisional date assigned. For example, all "5/?/2015" measurements were replaced with "5/15/2015" -- NEED TO CHECK THE ACTUAL FIELD SHEETS, IF THEY EXIST. Also note that there were ambiguous dates to present. For example, was 3/5/2015 March 5th or May 3rd? The excel file was not clear.
 
@@ -801,10 +579,10 @@ w16c %>%
   filter(!str_detect(well_id, "\\d")) %>% # filters all records NOT containing a digit
   datatable(rownames = FALSE, caption = "Records with a 'well_id' field NOT containing a number as part of the id. Most are SG, the others crap, but some might be recoverable by consulting field books/forms.")
 
-w16c %>%
-  filter(str_detect(well_id, "\\d")) %>% # filters all records containing a digit
-  mutate(wid = gsub("[^0-9.]", "", well_id)) %>% 
-  distinct(wid) %>% gt()# gsub to remove the character
+# w16c %>%
+#   filter(str_detect(well_id, "\\d")) %>% # filters all records containing a digit
+#   mutate(wid = gsub("[^0-9.]", "", well_id)) %>% 
+#   distinct(wid) %>% gt()# gsub to remove the character
 
 ```
 
@@ -823,13 +601,16 @@ w16c %>%
 
 ```
 
-#### Clean up
->whitespace
-> Change case
->misspelled  
->missing
+
 
 ```{r}
+
+# #### Clean up
+# > whitespace
+# > Change case
+# > misspelled  
+# > missing
+
 #### CLEAN UP SITE NAMES
 w16c <- w16c %>%
   filter(site != "22") %>% # there's a site called "22". Dropping it. 
@@ -1206,9 +987,6 @@ w16c <- w16c %>%
 ```
 
 
-### combine DCC (2001-2014), 2015-2019
-
-
 ```{r}
 #### clean the DCC for merge
 # nsfclean
@@ -1260,7 +1038,7 @@ well.coord <- wt.nsf %>%
 ```
 
 ```{r}
-
+## combine 01-17
 ## make consistent names to 16 data
 wt.nsf <- wt.nsf %>%
   rename(wid = wat_id) %>% 
@@ -1274,33 +1052,36 @@ wt.nsf <- wt.nsf %>%
 
 ## select down the fields  
 sel.nsf <- wt.nsf %>% 
-  dplyr::select(site, wid, well_id, fullid, date, rwte)
+  dplyr::select(su_cm, dtw_cm, site, wid, well_id, fullid, date, rwte) %>% 
+  mutate(su_cm = as.numeric(su_cm)) %>% 
+  mutate(dtw_cm = as.numeric(dtw_cm))
 
 sel.nsf %>% 
   ggplot(aes(rwte)) +
   geom_histogram()
 
-
-sel.16 <- w16c %>% 
+sel.16 <- w16c %>%
+  rename(su_cm = su) %>% 
+  rename(dtw_cm = dtw) %>% 
   dplyr::rename(fullid = fullID) %>% 
-  dplyr::select(site, wid, well_id, fullid, date, rwte)
+  dplyr::select(su_cm, dtw_cm, site, wid, well_id, fullid, date, rwte)
 
 sel.nsf <- sel.nsf %>%
   mutate(wid = as.character(wid))
 
-glimpse(sel.nsf)
-glimpse(sel.16)
-
+# bind rows
 sel.01.17 <- bind_rows(sel.16,sel.nsf)
 
+## filter out only wells
 sel.01.17 <- sel.01.17 %>%
-  filter(well_id == "sg")
-
+  filter(well_id != "sg")
 
 ```
 
-## Import 2018 and 2019 data
+### 2018-2019 Data
+
 ```{r}
+## Import 2018 and 2019 data
 ## read in data from Lewis
 
 w18_19 <- readxl::read_xlsx("data/raw/well_data_manual/2018_WTD/manual_well_readings_2018_2019.xlsx") 
@@ -1322,20 +1103,12 @@ w18_19 <- w18_19 %>%
   mutate(well_sg = case_when(well_1_sg_0 == "1" ~ "well",
                              well_1_sg_0 == "0" ~ "sg")) 
 
-
-
 w18_19 <- w18_19 %>% 
   mutate(su_cm = if_else(su_cm == "NA", "0", su_cm)) %>% 
   # filter(su_cm == "NA")
   mutate(su_cm = as.numeric(na_if(su_cm, "NA"))) %>% 
   mutate(dtw_cm = as.numeric(na_if(dtw_cm, "NA"))) %>% 
   filter(!is.na(dtw_cm)) 
-  
-
-
-# w18_19 %>%
-#   tabyl(wid, site) %>%
-#   write_csv("w1819_id_check.csv")
 
 ## calculate the rwte
 w18_19 <- w18_19 %>% 
@@ -1347,28 +1120,18 @@ w18_19 <- w18_19 %>%
   mutate(site2 = paste0(site,"-", plot)) %>% 
   mutate(fullid = paste0(site2,"-",wid))
   
-w18_19 %>% 
-  glimpse()
-
-
-## create select
+## select
 sel.18.19 <- w18_19 %>%
-  filter(well_1_sg_0 == "1") %>%
-  dplyr::select(site,plot, wid, fullid, date, rwte) 
+  # filter(well_sg == "well") %>%
+  mutate(well_id = paste0(plot, wid)) %>% 
+  mutate(site = paste0(site,"-",plot)) %>% 
+  dplyr::select(su_cm, dtw_cm, site, wid, well_id, fullid, date, rwte) 
 
 # filter out the one record with NA for id
 sel.18.19 <- sel.18.19 %>% 
   filter(!is.na(wid))
 
 ```
-
-```{r}
-# sel.18.19 %>%
-#   datatable()
-
-```
-
-
 
 ```{r}
 ### merge in the 18 and 19 data
@@ -1383,28 +1146,29 @@ sel.01.19 <- bind_rows(sel.01.17, sel.18.19)
 ```
 
 ```{r}
-
 sel.01.19 <- sel.01.19 %>% 
   separate(col = site,into = c("site_general","plot_type"),sep = "-", remove = FALSE)
 
+sel.01.19 %>%
+  tabyl(plot_type)
+
+# drop weird plot types
+# sel.01.19 %>%
+#   filter(plot_type %in% c("wbna", "eb1na","elkna")) %>% 
+#   gt()
+
+sel.01.19 <- sel.01.19 %>%
+  filter(plot_type %in% c("cc", "cx","dc","dx","obs"))
+
 ```
 
 ```{r}
-# Need to clear units
-# sel.01.17 <- sel.01.17 %>% 
-#   mutate(rellevel = rellevel*10) 
-```
-
-
-```{r}
-
 ## parse the date
 sel.01.19 <- sel.01.19 %>% 
   mutate(yr = lubridate::year(date)) %>% 
   mutate(doy = lubridate::yday(date)) %>% 
   mutate(mday = lubridate::mday(date)) %>%
   mutate(mo = lubridate::month(date)) 
-
 
 ## some filtering...
 sel.01.19 <- sel.01.19 %>% 
@@ -1415,13 +1179,36 @@ sel.01.19 <- sel.01.19 %>%
 
 
 ```{r}
-sel.01.19 %>% 
+sel.01.19 <- sel.01.19 %>%
+  filter(!is.na(wid)) %>% 
   group_by(fullid, yr) %>% 
-  tally() %>% 
-  ggplot(aes(yr, fullid)) +
-  geom_tile(aes(fill= n)) +
-  theme_bw()
+  mutate(n = n()) %>% 
+  ungroup()
 
+## select multiple years
+sel.01.19 <- sel.01.19 %>% 
+  filter(n>1) %>% 
+  filter(!is.na(rwte)) 
+
+## create file for qa qc
+# sel.01.19 %>% 
+#   tabyl(fullid, yr) %>% 
+#   write_csv("./output/output4qaqc/well_count_of_obs_fullid_x_yr.csv")
+  
+
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+# sel.01.19 %>% 
+#   group_by(fullid, yr) %>% 
+#   tally() %>% 
+#   ggplot(aes(yr, fullid)) +
+#   geom_tile(aes(fill= n), color = "white") +
+#   theme_gray() +
+#   theme(axis.text.y = element_text(size = 5.7)) +
+#   scale_fill_viridis() 
+# ggsave("./output/figures/sel_01_19_cnt_tile.png", dpi = 220, height = 49, width = 7.5)
 
 ## cross tab of observations by year and unique fullid
 xtab <- sel.01.19 %>% 
@@ -1434,17 +1221,215 @@ xtab <- sel.01.19 %>%
 
 ```
 
+### Export
 
-### QA QC
+```{r, eval= FALSE}
 
-
+sel.01.19 %>% 
+  select(-n) %>% 
+  write_csv("./output/manual_WTD_2001-2019_20191203.csv")
+  
+```
 
 
 ## WORKING bin 
 
-### Examine counts by fullID
+```{r, eval = FALSE, fig.height=24, fig.width=9}
+# #### Graphical crap detection
+# **Heat map: count of observations by "Wat_ID2" and "Site2"**
+wt.nsf %>% 
+  # names()
+  tabyl(wat_id2,site2) %>%
+  gather(key = site2,value = cnt,-wat_id2) %>% 
+  ggplot(aes(site2,wat_id2)) +
+  geom_tile(aes(fill=cnt), color="grey") +
+  # scale_fill_gradient(low = "white", high = "darkred") +
+  scale_fill_gradient2(low = "white", mid = "blue", high = "red", midpoint = 45, space = "Lab", na.value = "grey50", guide = "colourbar") +
+  # scale_fill_viridis() +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+
+```
+
+
+
+```{r, eval = FALSE, fig.height=24, fig.width=9}
+
+# > **Questions/Issues:**    
+# > 1. Note NA values. Figure out which sites and decide whether to keep or drop...     
+# > 2. Check what's up with "Eunlabeled". Can this be recovered as valid data or does it need to be dropped?   
+# > 3. What's the significance of the hyphenated ID's (e.g., O47-1 and O47-2)?    
+# > 4. Does the pattern of "missingness" match expectations?    
+# 
+# **Heat map: count of observations by Wat_ID2 and year EXCLUDING the data labelled with Year<2001**
+
+
+# s1
+wt.nsf %>% 
+  group_by(fullid, year) %>%
+  summarise(cnt = n()) %>%
+  filter(year>2000) %>% 
+  ggplot(aes(year, fullid)) +
+  geom_tile(aes(fill=cnt), color='white') +
+  scale_fill_viridis() +
+  theme_bw() +
+  labs(y="") +
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+
+# ggsave("./output/figures/fullid_year.png", dpi = 220, width = 8.25, height = 10.5)
+
+# > **Questions/Issues:**    
+# > 1. Note the missing 2007 data.     
+# > 2. How does the pattern of "missingness" match expectations?  
+
+```
+
+  
+
+```{r, fig.height=30, fig.width=9, eval=FALSE}
+
+# **"E" wells/staff gauges -- jitter plots**
+# exp plots - box plot
+# wt.nsf %>% 
+#   group_by(Wat_ID2) %>%
+#   mutate(cnt.WatID = n()) %>%
+#   filter(Year>2000) %>%
+#   mutate(Year = as.character(Year)) %>%
+#   filter(str_detect(Wat_ID2, "E")) %>% 
+#   # filter(cnt.WatID > 3 & rellevel < 999) %>% 
+#   # ggplot(aes(Date,rellevel)) +
+#   ggplot(aes(Year,rellevel)) + 
+#   geom_boxplot(aes(group=Year)) +
+#   facet_wrap(~Wat_ID2, ncol=5, scales = "free") +
+#   theme(axis.text.x=element_text(angle=45, hjust=1))
+
+## exp wells - jitter
+wt.nsf %>% 
+  group_by(Wat_ID2) %>%
+  mutate(cnt.WatID = n()) %>%
+  filter(Year>2000) %>%
+  mutate(Year = as.character(Year)) %>%
+  filter(str_detect(Wat_ID2, "E")) %>% 
+  # filter(cnt.WatID > 3 & rellevel < 999) %>% 
+  # ggplot(aes(Date,rellevel)) +
+  ggplot(aes(Year,rellevel)) + 
+  geom_jitter(width = 0.15, height = 0.15, aes(color = Year)) +
+  # geom_point(color="darkblue", alpha=0.1,position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.2)) +
+  # geom_boxplot(aes(group=Year)) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  facet_wrap(~Wat_ID2, ncol=4, scales = "free") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=7, angle=75, hjust = 1))
+
+# > **Questions/Issues:**    
+# > 1. Seem to be a fairly large number of questionable values. Individual outliers need to be examined more closely (e.g., E199 in 2013, E2 in 2011, etc.). Are these data entry errors, artifacts from the rescaling process, ??          
+# > 2. Issues with some specific wells/gauges more clearly seem to be related to the rescaling (e.g., E25)   
+# > 3. What's with the wells with more limited records (e.g., E300 has only two years of data. Why? Was this installed for a specific and limited purpose or is this an issue with well IDs?)  
+
+```
+
+
+```{r, fig.height=28, fig.width=9, eval=FALSE}
+
+# ** "O" wells/staff gauges -- jitter plots**
+
+## obs wells - jitter
+wt.nsf %>% 
+  group_by(Wat_ID2) %>%
+  mutate(cnt.WatID = n()) %>%
+  filter(Year>2000) %>%
+  mutate(Year = as.character(Year)) %>%
+  filter(str_detect(Wat_ID2, "O")) %>% 
+  # filter(cnt.WatID > 3 & rellevel < 999) %>% 
+  # ggplot(aes(Date,rellevel)) +
+  ggplot(aes(Year,rellevel)) + 
+  geom_jitter(width = 0.15, height = 0.15, aes(color = Year)) +
+  # geom_point(color="darkblue", alpha=0.1,position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.2)) +
+  # geom_boxplot(aes(group=Year)) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  facet_wrap(~Wat_ID2, ncol=5, scales = "free") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=7, angle=75, hjust = 1))
+
+# > **Questions/Issues:**    
+# > 1. Seem to be a fairly large number of questionable values. Individual outliers need to be examined more closely (e.g., O1 in 2013, O10 in 2014, O11 in 2014). Are these data entry errors, artifacts from the relativization process, ??     
+# > 2. Issues with some specific wells/gauges more clearly seem to be related to the rescaling (e.g., O200, O21_2)  
+# > 3. Why do some wells have such short records? I'm assuming some might be new (e.g., O122, which has observations only in 2014), but then there are the issues of wells/gauges that blink in and out. For example:ODP1 (2013 only), O42 (2008-2011), etc. **Have well numbers been changed over the duration of the study?**
+```
+
+
+
 
 ```{r, eval=FALSE}
+#### Spatial plotting of the 2001-2015 DCC well data set
+
+## find missing
+wt.nsf %>% 
+  filter(is.na(x) | is.na(y) | x == "999" | y == "999") %>%
+  datatable(caption = "Records with missing/bogus x or y coordinates.")
+
+```
+
+
+```{r, eval=FALSE}
+# create sf object from coordinates. This time, filtering out records with missing x,y
+wt.nsf.sf <- wt.nsf %>% 
+  filter(!is.na(x)) %>% 
+  filter(!is.na(y)) %>% 
+  filter(x != "999") %>% 
+  st_as_sf(.,
+           coords = c("x","y"),
+           crs = "+proj=utm +zone=12 +ellps=GRS80 +datum=NAD83 +units=m +no_defs")
+
+```
+
+
+```{r, eval = FALSE, fig.align="center"}
+# ** Map of wells/gauges from DCC dataset**
+# 
+# _Note: Records with missing/bogus coordinates removed._
+## opentopo
+# mapview(wt.nsf.sf,map.types = "OpenTopoMap", zcol = "Wat_ID2", alpha = 0.12, legend = FALSE)
+
+## opentopo + imagery options
+mapview(wt.nsf.sf, map.types = c("OpenTopoMap","Esri.WorldImagery"), zcol = "plot", alpha = 0.12, legend = FALSE)
+
+```
+
+
+```{r, eval = FALSE}
+
+# ** Locations of Sites/wells with records with a date of "1/1/1900"**
+
+## Locations of the "1900" values
+wt.nsf.sf %>%
+  filter(Year == "1900") %>%
+  mapview(., map.types = c("OpenTopoMap","Esri.WorldImagery"), zcol = "Wat_ID2", alpha = 0.12, legend = FALSE)
+
+# Seem to be scattered widely...
+
+```
+
+
+```{r, eval=FALSE}
+
+# ** Sites/wells with records with a date of "1/1/1900"**
+wt.nsf %>%
+  filter(Year <= 2000) %>% 
+  select(1:4,Site_Typ,Wat_ID2,Wat_Type) %>% 
+  datatable()
+
+# These need to be fixed...
+
+```
+
+
+
+```{r, eval=FALSE, echo = FALSE}
+
+### Examine counts by fullID
 ### select just the key from 2015,2016,2017
 # w16c <- w16c %>% 
 #   mutate(flag = if_else(condition = is.na(site),true = "flag",false = "no")) %>% 
@@ -1467,7 +1452,7 @@ w16c %>%
 
 ```
 
-```{r, keyPlottingPurrr, eval=FALSE}
+```{r, keyPlottingPurrr, eval=FALSE, echo = FALSE}
 
 #### Plotting 15 16 17
 
@@ -1527,7 +1512,7 @@ w16c.nest %>%
 
 ```
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo = FALSE}
 ##### Calendar Heatmap
 ## prep for calendar heatmap 
 # See cTrap01.Rmd in the YellNSF_Rstudio folder
@@ -1546,7 +1531,7 @@ w16c <- w16c %>%
 ```
 
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo = FALSE}
 #### nesting purrr 
 
 ##### split by site
@@ -1578,7 +1563,7 @@ hm.test <- map2(w16c.site.split, sitenames,
 ```
 
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo = FALSE}
 
 ##### purrr + ggplot  
 # https://aosmith.rbind.io/2018/08/20/automating-exploratory-plots/
@@ -1611,12 +1596,10 @@ expl = names(dat)[4:7]
 
 ```
 
-### SPATIAL
-
 
 
 ```{r, eval=FALSE, echo=FALSE}
-
+## more spatial
 wells <- sf::st_read("data/Select_files/wells_spatial/Yell_Wells.shp", quiet = TRUE)
 
 wells %>% 
@@ -1626,7 +1609,6 @@ wells %>%
 
 # plot 
 mapview(wells,map.types = "Esri.WorldImagery", zcol = "Type", alpha = 0.12, legend = TRUE)
-
 
 ```
 
