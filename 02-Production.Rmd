@@ -1,0 +1,1313 @@
+---
+title: "Production and Willow Height Data - Data Processing Report"
+output:
+  html_document: 
+    theme: journal
+    toc: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+# knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'center')
+# opts_knit$set(root.dir=normalizePath('../')) # this is required if Rmd is nested below the project directory
+
+# opts_chunk$set(fig.path = "../output/figures/") # corrected path and added dev. Needed to specify a subdirectory for figs
+
+```
+
+**Updated:** `r format(Sys.time(), '%d %B, %Y')`
+
+
+## Introduction
+
+This document evaluates willow production and height data from project inception through 2019. 
+Three primary datasets are processed: 
+
+1. Measurement data archived on the "Digital Collections of Colorado" (DCC) library site
+
+2. 2015-2017 data collected by D. Kotter
+
+3. 2018-2019 data collected by L. Messner
+
+Analyses aim to characterize basic data structure and identify potential issues such as:
+
+* Inconsistently named/typed factors    
+* Missing values
+* Data values outside of expected range or showing unusual patterns
+
+In addition, data are cleaned to produce archival files for further analyses.
+
+```{r,echo=FALSE}
+# library(here)
+# here()
+# install.packages("bindrcpp")
+suppressPackageStartupMessages(library(tidyverse))
+library(fs)
+suppressPackageStartupMessages(library(sf))
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(readxl))
+suppressPackageStartupMessages(library(mapview))
+suppressPackageStartupMessages(library(viridis))
+library(ggExtra)
+library(DT)
+library(kableExtra)
+suppressPackageStartupMessages(library(lubridate))
+library(anytime)
+suppressPackageStartupMessages(library(compare))
+suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(dataMaid))
+library(gt)
+
+```
+
+## Data import and initial inspection 
+### Shoot level spring current annual growth 
+#### 2003-2015 (DCC Collection)
+
+Data are in seprate directories and files
+* Experimental  
+```{r}
+#2001-2015 prod
+list.files <- fs::dir_ls("data/raw/production/2001_2015",recursive = TRUE, glob = "*.csv")
+
+## Purrr: take list and read in first sheet of each folder
+
+# the 'readr' way I'd like to do this, here are many parsing errors. Likely how features like NA values are dealt with... 
+# prod.dat <- list.files %>%
+#   map(read_csv)  
+# pushing it through with base 'read.csv'
+prod.dat <- list.files %>%
+  map(read.csv) # Note
+
+
+## view the names of each of the 2001 to 2015 'prod' files
+prod.dat %>%
+  map_df(names)
+## same names across files, but rowbind runs into problems
+
+# prod.dat %>% 
+#   map_df(bind_rows) # results in error: Error in bind_rows_(x, .id) : 
+  # Column `stid` can't be converted from integer to factor
+
+# prod.dat %>% 
+#   map_df(rbind) # fails with same error as above (probably just as well...)
+
+## using data.table approach
+prod.dat.combined <- data.table::rbindlist(prod.dat, use.names=TRUE, fill=TRUE, idcol="sourceFile") %>%
+  as.tibble()
+
+pDCC <- prod.dat.combined  
+
+```
+
+```{r}
+## create a LU table for species and site
+dcc.spp.lu <- pDCC %>% 
+  select(site,plot,species, willid) %>% 
+  distinct()
+
+```
+
+```{r}
+pDCC %>%
+ tabyl(lendiam)
+
+## most records are lengths
+ #   lendiam      n      percent valid_percent
+ #   lengths 186014 0.9963096469  0.9996184539
+ # diameters     71 0.0003802831  0.0003815461
+ #      <NA>    618 0.0033100700            NA
+
+```
+
+
+#### 2016 Data  
+
+The field "Record Id" has been added to help indexing rows for QA/QC purposes. It's a sequential index of rows. Use to look for rows in the original xlsx file...
+
+```{r, message=FALSE, warning=FALSE}
+
+p16.raw <- readxl::read_xlsx("data/raw/production/2016_Raw_Production_20180421.xlsx")
+# names(p16.raw)
+
+# there are problems with how the fields are named in the csv.
+# use the "clean_names" func in janitor to fix...
+p16 <- p16.raw %>% 
+  clean_names() %>% 
+  tibble::rownames_to_column(var = "RecordID") # this is a utility column for use in comparing with the original spreadsheet. No meaning to analysis.
+
+# names(p16)
+
+```
+
+> There are `r tally(p16)` records in the raw data set.
+
+```{r}
+## basic cleaning
+# Treatment of date column. Imported as double...
+p16 <- p16 %>%
+  mutate(date = mdy(date)) %>% 
+  mutate(mo = lubridate::month(date,label = TRUE)) %>%
+  mutate(year = year(date))
+
+```
+
+```{r, eval=FALSE}
+# print a table of field names. Compare with the 2001-2015 data
+p16 %>%
+  names() %>% 
+  as_tibble() %>% 
+  datatable(colnames = "Field names", rownames = FALSE)
+  # knitr::kable()
+# not needed since the field names are printed in the next chunk.
+
+```
+
+
+
+```{r, warning=FALSE}
+# **Missing data**
+skim16 <- skimr::skim(p16)
+## missing values
+skim16 %>% 
+  gt()
+str()
+  filter(stat == "missing") %>% 
+  select(variable, type, stat, value) %>% 
+  rownames_to_column(var = "FieldOrder") %>% # added to allow sorting in order presented in field form 
+  arrange(-value) %>% 
+  datatable(rownames = FALSE, caption = "Missing values by variable. Use FieldOrder to resort fields in order found in spreadsheet.", filter = 'top')
+
+```
+
+
+
+```{r, eval=TRUE}
+
+# > **Questions/Issues:**    
+# > 1. We've got varying levels of "missingness" for various key fields (e.g., date, spp). **Check field forms**
+# 
+# 
+# **Missing data: date**
+# 
+# > There are `r p16 %>% filter(is.na(date)) %>% tally()` records with a missing value for _"date"_.
+
+p16 %>% 
+  filter(is.na(date)) %>% 
+  datatable(rownames = FALSE, caption = "Rows with missing data (NA) for date")
+
+```
+
+**Missing data: Stem ID**
+
+> There are `r p16 %>% filter(is.na(stem_id)) %>% tally()` records with a missing value for _"stem_id"_.
+
+```{r, eval=TRUE}
+
+p16 %>% 
+  filter(is.na(stem_id))
+
+```
+
+> Deleting these.
+
+```{r}
+p16 <- p16 %>% 
+  filter(!is.na(stem_id))
+
+```
+
+**Missing data: Wildid**
+
+> In the 2017 prod, this is "willid". Also referened elsewhere as "plant". We should make consistent. 
+> There are `r p16 %>% filter(is.na(wildid)) %>% tally()` records with a missing value for _"wildid"_. 
+
+> Dropped.
+
+```{r}
+
+# p16 %>% 
+#   filter(is.na(wildid)) %>% 
+#   datatable(rownames = FALSE, caption = "Rows with missing data (NA) for wildid")
+
+
+## drop the records with na for wildid.
+
+p16 <- p16 %>% 
+  filter(!is.na(wildid))
+
+```
+
+**Missing data: year**
+
+> There are `r p16 %>% filter(is.na(year)) %>% tally()` records with a missing value for _"year"_. 
+
+```{r}
+
+# id the records with 'na' for year
+# p16 %>% 
+#   filter(is.na(year)) %>% 
+#   datatable(rownames = FALSE, caption = "Rows with missing data (NA) for year")
+
+## drop the records with na for wildid
+p16 <- p16 %>% 
+  filter(!is.na(year)) 
+
+```
+
+**Missing data: spp**
+
+> There are `r p16 %>% filter(is.na(spp)) %>% tally()` records with a missing value for _"spp"_. 
+
+> Dropping NA.  
+
+```{r}
+
+# p16 %>% 
+#   filter(is.na(spp)) %>% 
+#   datatable(rownames = FALSE, caption = "Rows with missing data (NA) for spp")
+
+## drop the records with na for spp
+p16 <- p16 %>% 
+  filter(!is.na(spp)) 
+
+```
+
+**Distinct spp codes**
+
+```{r}
+p16 %>% 
+  group_by(spp) %>% 
+  tally() %>% 
+  knitr::kable()
+```
+
+**Variable:live** 
+
+```{r}
+
+p16 %>% 
+  group_by(live) %>% 
+  tally() %>% 
+  knitr::kable()
+
+```
+
+> **Questions/Issues:**    
+> Need to standardize the encoding for the 'live' field: 
+> *If "dead" and "DEAD" are different, we should come up with a less ambiguous way to encode this.   
+> *What about **"live"** vs. **"live?"** ?
+> *"nd" vs "NA" vs "missing"?
+
+**Variable: Browse scheme**
+
+```{r}
+# p16 %>%
+#   distinct(br_scheme)
+
+p16 %>% 
+  group_by(br_scheme) %>% 
+  tally() %>% 
+  arrange(br_scheme) %>% 
+  datatable(rownames = FALSE)
+
+
+```
+
+> There are `r p16 %>% filter(is.na(br_scheme)) %>% tally()` records with a missing value for _"br_scheme"_. 
+
+```{r}
+## 
+# p16 %>%
+#   filter(is.na(br_scheme)) %>%
+#   select(1:7) %>% 
+#   datatable(rownames = FALSE, caption = "Browse scheme = NA")
+
+p16 %>%
+  group_by(br_scheme) %>% 
+  tally() %>%
+  ggplot(aes(x=reorder(br_scheme,n),y = n)) +
+  geom_pointrange(aes(ymin = 0, ymax = n)) +
+  geom_point(size=3, color='red') +
+  labs(x="br_scheme", y="n", title = "Count of br_scheme codes") +
+  coord_flip()
+
+```
+
+> **Questions/Issues:**
+> Does NA mean ubrowsed? 
+
+**Variable: unbrowse scheme**
+
+> There are `r p16 %>% filter(is.na(ub_scheme)) %>% tally()` records with a missing value for _"ub_scheme"_. 
+
+```{r}
+# p16 %>% 
+#   group_by(ub_scheme) %>% 
+#   tally() %>% 
+#   datatable(rownames = FALSE)
+
+p16 %>%
+  group_by(ub_scheme) %>% 
+  tally() %>%
+  ggplot(aes(x=reorder(ub_scheme,n),y = n)) +
+  geom_pointrange(aes(ymin = 0, ymax = n)) +
+  geom_point(size=3, color='red') +
+  labs(x="ub_scheme", y="n", title = "Count of ub_scheme codes") +
+  coord_flip()
+
+```
+
+
+#### 2017 Data  
+
+
+```{r}
+
+# import data. Data downloaded from team GDrive to local dir
+p17 <- readxl::read_xlsx("data/raw/production/2017_Raw_Production_20180423.xlsx",col_types = "text")
+
+p17  <-  p17 %>% 
+  clean_names()
+
+glimpse(p17)
+
+## format date
+p17 <- p17 %>% 
+  mutate(date = paste0("0",date)) %>% 
+  mutate(date = mdy(date))
+
+
+```
+
+#### 2018 Data
+
+Data are in seprate directories and files
+* Experimental  
+```{r}
+# updated as of 20191203
+files2018 <- fs::dir_ls("./data/raw/production/Raw_2018_Production", recurse = FALSE, glob = "*.xlsx")
+
+library(readxl)
+#for each excel file name, read excel sheet and append to df
+p18 <- files2018 %>% 
+  map_df( ~ read_excel(path = .x,trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV46"))
+
+p18 <- p18 %>% 
+  janitor::clean_names()
+
+# set date
+p18 <- p18 %>% 
+  mutate(date = ymd(date))
+
+```
+
+
+```{r}
+# new
+## Select subset and type cast
+p18sel <- p18 %>% 
+  select(date, site, plot, spp, wilid, pl_ht_cm, stid, live_status) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) 
+
+p18sel %>% 
+  glimpse()
+
+# eliminate duplicate rows 
+p18sel <- p18sel %>% 
+  distinct()
+
+```
+
+### 2019 Data
+
+```{r}
+
+# updated as of 20191203
+files2019 <- fs::dir_ls("./data/raw/production/Raw_2019_Production", recurse = FALSE, glob = "*.xlsx")
+
+#for each excel file name, read excel sheet and append to df
+p19 <- files2019 %>% 
+  map_df( ~ read_excel(path = .x,trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV46"))
+
+p19 <- p19 %>% 
+  janitor::clean_names()
+
+p19 <- p19 %>% 
+  mutate(date = ymd(date))
+
+
+## Select subset and type cast
+p19sel <- p19 %>% 
+  select(date, site, plot, spp, wilid, pl_ht_cm, stid, live_status) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) 
+
+p19sel %>% 
+  glimpse()
+
+# eliminate duplicate rows 
+p19sel <- p19sel %>% 
+  distinct()
+
+## combine 18 and 19
+p18p19sel <- bind_rows(p18sel, p19sel)
+
+```
+
+```{r}
+# 17
+p17sel <- p17 %>% 
+  select(date, site, plot, spp, wildid, height_cm, stem_id, live) 
+
+p17sel <- p17sel %>% 
+  rename(stid = stem_id) %>% 
+  rename(wilid = wildid) %>% 
+  rename(pl_ht_cm = height_cm) %>% 
+  rename(live_status = live)
+
+p17sel %>%
+  glimpse()
+
+
+# fix formating of wilid
+p17sel <- p17sel %>% 
+  mutate(wilid = as.integer(wilid)) %>% 
+  mutate(wilid = as.character(wilid)) %>%
+  # mutate(date = as.integer(date)) %>% 
+  # mutate(date = as.character(date)) %>%
+  mutate(stid = as.integer(stid)) %>% 
+  mutate(stid = as.character(stid)) %>%
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
+
+p18p19sel %>% names()
+
+## bring in 17
+p17p18p19sel <- bind_rows(p17sel, p18p19sel)
+
+## change  stid for stem_id
+## live_status
+## stem_id ~ stid
+## height_cm
+
+```
+
+
+ ----
+ 
+```{r, eval=FALSE}
+## old
+# import data. One tab of many. Approach uses apply functions...
+### purrr approach
+prod.path <- "data/raw/production/Exp_2018_Production_Height_20181220.xlsx"
+
+# prod.path %>% 
+#   excel_sheets() %>% 
+#   set_names() %>% 
+#   map(read_excel, path = prod.path, skip = 1) %>% 
+#   map(clean_names)
+### this works. However, note that type import isn't consistent
+
+## Here, I import eveything as char and a list and will fix the key types manually 
+prod18.list <- prod.path %>% 
+  excel_sheets() %>% 
+  set_names() %>%
+  map(read_excel, path = prod.path, skip = 1, col_types = 'text') %>% 
+  map(clean_names)
+
+# the following takes all of the tabs, imports them into a single tibble
+# I coerced everything to char, so need to type-fix.
+p18 <- prod.path %>% 
+  excel_sheets() %>% 
+  set_names() %>%
+  map(read_excel, path = prod.path, skip = 1, col_types = 'text') %>% 
+  map(clean_names) %>% 
+  map_df(.f = bind_rows, .id = "FNAME")
+
+# the above seems to work. Of course, I heavy-handedly forced everthing to char...
+# I could theoretically type set on import through the 'col_types' arg, BUT some of the tabs have 126 columns, some 127... Not sure which columns differ. A different puzzle to solve at some point :)
+
+prod18.list %>% 
+  map(.f = names) %>% 
+  map_df(length) %>% 
+  gather(key = source, value = numberVars) %>% 
+  datatable(caption = "Distinct tabs in import file and the number of distinct variables in the tab.")
+
+# note that all teh tabs have 126 variables EXCEPT for wb_cc_prod, wb_cx_prod, and wb_dx_prod, which have 127
+
+```
+
+#### Clean and Combine Years
+
+
+```{r}
+
+#field names comparisons as start of rectifying
+
+fnames2015 <- tibble(var = names(pDCC)) %>% 
+  mutate(data_yr = "DCC")
+
+fnames2016 <- tibble(var = names(p16)) %>% 
+  mutate(data_yr = as.character("2016"))
+
+fnames2017 <- tibble(var = names(p17)) %>% 
+  mutate(data_yr = as.character("2017"))
+
+# fnames2018 <- tibble(var = names(p18)) %>% 
+#   mutate(data_yr = as.character("2018"))
+
+## new 2018
+fnames2018 <- tibble(var = names(raw18)) %>% 
+  mutate(data_yr = as.character("2018"))
+
+## 2019
+
+# rowbind the above
+fnames.comb <- list(fnames2015,fnames2016, fnames2017, fnames2018) %>% 
+  map_df(bind_rows)
+  
+```
+
+
+```{r}
+# crosstab of the field names between periods (DCC, 2016, 2017, 2018)
+fnames.comb.ctab <- fnames.comb %>% 
+  tabyl(var, data_yr)
+
+# fnames.comb.ctab %>%
+# write_csv("data/raw/production/fnames_DCC_16_17.csv")
+
+```
+
+```{r}
+
+fnames.comb.ctab %>% 
+  arrange(-DCC) %>% 
+  clean_names() %>% 
+  # View()
+  datatable(caption = "Field name in raw data.")
+  # write_csv("data/raw/production/fnames_DCC_16_17.csv")
+  
+```
+
+
+```{r, eval=FALSE}
+## change 'wildid' in p16 to match 'willid' in DCC
+p16 <- p16 %>% 
+  rename(willid = wildid)
+
+# reduce number of fields
+p16 <- p16 %>% 
+  select(-c(RecordID, date, tech,sapsucker_wells_y_n,cytospora_fungus_y_n,notes,notes_2))
+
+
+p16 %>%
+  gather(.,key = key, value = val,-c(RecordID,date,willid))
+
+
+names(p16)
+
+p16.mod <- left_join(p16, dcc.spp.lu, by="willid")
+
+
+dcc.spp.lu %>% 
+  tabyl(willid, site) %>% 
+  filter
+
+##
+p16 %>% 
+  tabyl(br_scheme)
+
+##
+p17 %>% 
+  tabyl(br_scheme)
+
+
+```
+
+```{r}
+
+
+
+
+```
+
+
+
+## PAST CODE
+
+### ExtractCummMass_NTH.r
+
+```{r, eval=FALSE}
+
+#Does cummulative mass computations for experimental data
+rm(list=ls())
+library(tidyverse)
+setwd("/Users/Tom/Documents/NSF Yellowstone LTREB 2011/A_Tom_Master_analysis_files/")
+path = function (stem,r=root){
+  return(paste(r,stem, sep=""))	
+}
+root="/Users/Tom/Documents/NSF Yellowstone LTREB 2011/A_Tom_Master_analysis_files/Data/experimental/"
+
+X = read.table(path("production/willows-plantCAGfall2001-2015.txt"),header=T)
+Y=read.table(path("utilization/willows-plantCAGspring2002-2015.txt"),header=T)
+
+
+willow.levels=levels(as.factor(X$willid))
+names = c("site", "plot","species","willid", "2001"," 2002","2003", "2004", "2005", "2006","2007", "2008", "2009","2010", "2011", "2012", "2013", "2014", "2015") 
+AcProd=as.data.frame(matrix(NA,length(willow.levels),length(names)))
+names(AcProd)=names
+for (i in 1:length(willow.levels)){
+  FCAG=0
+  
+  
+  for (j in c(2002:2005,2007:2015)){
+  tempX=X[which(X$willid==willow.levels[i] &X$year==j),]
+  tempY=Y[which(Y$willid==willow.levels[i] & Y$year==j+1),]
+  SCAG=0
+  
+  if(length(tempY[,1])>0) {SCAG=tempY$weight}
+  
+    if (length(tempX[,1])>0) {
+    FCAG=ifelse(SCAG>0,FCAG+SCAG,FCAG+tempX$weight)
+    AcProd[i,1:4]=tempX[1,2:5]
+    AcProd[i,j-2001+4]=FCAG
+    }
+  
+}
+}
+
+
+write.table(AcProd,path("production/AccumulatedProduction_data.txt"))  
+  ##accumulated growth is the amt added during growing season (FCAG) less what is lost to browsing (FCAG-SCAG) so SCAG represents the cumulative
+  ##except in years where we don't have SCAG (07), then we just have to add the FCAG???
+  
+  ##just accumulate SCAG
+  
+
+wt=read.table(path("production/AccumulatedProduction_data.txt"), header=T)
+names(wt)[5:ncol(wt)] = seq(2001,2015)
+wt = wt %>% gather(key="year", value="cum_mass",5:ncol(wt))
+q=quantile(wt$cum_mass, c(.01,.5,.995), na.rm=T)
+hist(wt$cum_mass)
+plot(wt$year,wt$cum_mass,col=wt$plot, pch=19, cex=.5)
+ggplot(data = wt, aes(year,cum_mass, color=plot)) + geom_point()  + labs(y="Current annual growth (gm)")
+
+wt$exp=1
+wt$season="fall"
+
+
+M=as.data.frame(matrix(0,nrow=4,ncol=5))
+names(M)=c("plot",c("dam","browse", "fence", "treat"))
+M[1,]=c(1,0,1,0,"CC")
+M[2,]=c(2,0,0,1,"CX")
+M[3,]=c(3,1,1,0,"DC")
+M[4,]=c(4,1,0,1,"DX")
+
+wt = merge(wt,M, by=c("plot"))
+qc_plot(wt,y="cum_mass", by = "treat")
+boxplot(wt$cum_mass ~ as.factor(wt$treat), outline=FALSE, col="grey", xlab="Year", ylab="Browsing intensity", varwidth=TRUE, notch=TRUE, cex.lab=1.25)
+
+
+#Some of Kristin's plotting etc below.
+
+#prmu=mean(ht[ht$year==2001,3], is.na=F)
+ccmu=mean(wt$X2010[which(wt$plot==1)], na.rm=T)
+cxmu=mean(wt$X2010[which(wt$plot==2)], na.rm=T)
+dcmu=mean(wt$X2010[which(wt$plot==3)], na.rm=T)
+dxmu=mean(wt$X2010[which(wt$plot==4)], na.rm=T)
+
+
+
+ccsd=sd(wt$X2010[which(wt$plot==1)], na.rm=T)
+cxsd=sd(wt$X2010[which(wt$plot==2)], na.rm=T)
+dcsd=sd(wt$X2010[which(wt$plot==3)], na.rm=T)
+dxsd=sd(wt$X2010[which(wt$plot==4)], na.rm=T)
+
+cclo=quantile(wt$X2010[which(wt$plot==1)], .05, na.rm=T)
+cxlo=quantile(wt$X2010[which(wt$plot==2)], .05, na.rm=T)
+dclo=quantile(wt$X2010[which(wt$plot==3)], .05, na.rm=T)
+dxlo=quantile(wt$X2010[which(wt$plot==4)], .05, na.rm=T)
+
+cchi=quantile(wt$X2010[which(wt$plot==1)], .95, na.rm=T)
+cxhi=quantile(wt$X2010[which(wt$plot==2)], .95, na.rm=T)
+dchi=quantile(wt$X2010[which(wt$plot==3)], .95, na.rm=T)
+dxhi=quantile(wt$X2010[which(wt$plot==4)], .95, na.rm=T)
+
+
+
+means=c(ccmu,dcmu,cxmu,dxmu)
+
+#pdf("Final_Masseff.pdf")
+par(mfrow=c(2,1), mai=c(.25,1,.5,1), cex=1)
+
+barplot(means, ylim=c(0,1200), col=c('white','grey','white','grey'), space=c(.4,0,.4,0), ylab="Accumulated Mass (g)")
+
+# lines(c(.9,.9),c(cclo,cchi), lwd=1.5)
+# lines(c(1.9,1.9),c(dclo,dchi), lwd=1.5)
+# lines(c(3.3,3.3),c(cxlo,cxhi), lwd=1.5)
+# lines(c(4.3,4.3),c(dxlo,dxhi), lwd=1.5)
+text(c(1.4, 3.8),c(100,100), labels=c("Browsed", "Unbrowsed") )
+legend(0.8,1100,fill=c('white','grey'),c("Ambient water table","Raised water table") ) 
+ 
+                                 
+   
+efbr=log(cxmu/ccmu)
+efwat=log(dcmu/ccmu)
+efboth=log(dxmu/ccmu)
+effect=c(efboth,efwat,efbr)
+
+par(mai=c(1,1,.1,1))
+barplot(effect, horiz=T, space=c(.4,.4,.4), col=c('black','black','black'), xlim=c(0,1),xlab="Effect Size", names.arg=c("Both", "Water", "Browsing"))  
+  
+  
+ #dev.off() 
+
+
+ wt$BR=0
+ wt$wat=0
+ 
+ wt$BR[which(wt$plot==2 | wt$plot==4)]=1
+ wt$wat[which(wt$plot==3 | wt$plot==4)]=1
+ ##linear models show that removing browsing does not have a significant effect on mass accumulated after 10 years, but water definitely does (site matters too, but not species)
+ 
+ 
+```
+
+### willows-CAGcalcKM_obs_Apr11.R
+```{r, eval=FALSE}
+
+# ST657K - willows in Yellowstone National Park
+library(gdata)
+#########
+# fall production calculations
+#########
+# willows-prod2.csv --- willows-prod7.csv
+
+setwd("/Users/Kristinmarshall/Google Drive/KM WORK/Yellowstone/Files For Kristin")
+
+yearend=2013 #last year you want to read in
+yearstart=2008 #first year you want to read in
+
+X = read.csv("/Users/kristinmarshall/dropbox/docbackup/YellowstoneWillowData/ST675project/DATA/ProductionALLYEARS/obsprod08.csv",header=T)
+
+
+for(i in 9:10) {
+   if(i>9){
+    tempX=read.csv(paste("/Users/kristin/dropbox/docbackup/YellowstoneWillowData/ST675project/DATA/ProductionALLYEARS/obsprod",i,".csv",sep=""),header=T)
+    }
+   if(i<10){tempX = read.csv(paste("/Users/kristin/dropbox/docbackup/YellowstoneWillowData/ST675project/DATA/ProductionALLYEARS/obsprod0",i,".csv",sep=""),header=T) 
+     
+      }
+   X = rbind(X, tempX)
+   
+}
+ for(i in 11:13) {
+  
+  
+	tempX=read.csv(paste("/Users/kristinmarshall/Google Drive/KM WORK/Yellowstone/Files for Kristin/Reshuffle Output/obs_production20",i,"_reshuffleNoBrowse.csv", sep=""),header=T)  
+   
+   names(tempX)=c("year" , "site","plot","species","willid", "height", "heightprev", "longdiam","perpdiam","totstems","newlive","newdead","stid","notes","live","newstembd","bigshtbd","bigshtlen","BrSch","scheme","DBSch","Brem","remain","DBrem","BUBDB","meas1",'meas2')  
+tempX$lendiam=NA  
+tempX$lendiam="lengths"
+
+##this is just reformatting/renaming headers to make all the year files fit together
+tempdata=cbind(tempX[,1:10], newdead=tempX$newdead, newlive=tempX$newlive, newst1=NA, newst2=NA, newst3=NA, newst4=NA, newst5=NA, newst6=NA, newst7=NA, newst8=NA, newst9=NA, newst10=NA, newst11=NA, stid=tempX$stid, lendiam=tempX$lendiam, notes=tempX$notes, live=tempX$live, newstembd=tempX$newstembd, bigshtbd=tempX$newstembd, bigshtlen=tempX$bigshtlen, scheme=tempX$scheme, remain=tempX$remain, BUBDB=tempX$BUBDB, meas1=tempX$meas1, meas2=tempX$meas2)
+   
+   
+   
+   
+   
+   
+   
+   X = rbind(X, tempdata)
+  
+}
+
+names(X)[34]='shtmeas'
+#get rid of any remaining summer browsed measurements
+indx=which(X$BUBDB=="B"|X$BUBDB=="DB"| X$meas2>0)
+X=X[-indx,]
+X=drop.levels(X)
+
+fdata=X
+
+summary(fdata)
+
+##do some cleanup to change NAs to numbers were applicable, and correct some data entry errors
+
+fdata$year=as.numeric(fdata$year)
+fdata=fdata[is.na(fdata$year)==F,]
+fdata=fdata[is.na(fdata$willid)==F,]
+
+
+fdata$remain[is.na(fdata$remain)==T]=0
+fdata$scheme[is.na(fdata$scheme)==T]=1
+fdata$bigshtlen[is.na(fdata$bigshtlen)==T]=0         
+
+fdata$scheme=as.numeric(fdata$scheme)
+fdata$height=as.numeric(fdata$height)
+fdata$remain=as.numeric(fdata$remain)
+
+
+
+fdata$site[fdata$site=="eb10"]="eb1"
+fdata$site[fdata$site=="eb20"]="eb2"
+fdata$site[fdata$site=="wb10"]="wb1"
+fdata$site[fdata$site=="wb20"]="wb2"
+fdata$site[fdata$site=="elk 2"]="elk2"
+
+fdata$site=as.character(fdata$site)
+fdata$site[which(fdata$site=="lost l")]="lostl"
+fdata$site[fdata$site=="lost c"]="lostc"
+fdata$site=as.factor(fdata$site)
+
+
+fdata$species[fdata$species=="beb"]="bebb"
+fdata$species[fdata$willid==139]="boothii"
+fdata$species[fdata$willid==36]="bebb"
+fdata$species[fdata$willid==358]="bebb"
+fdata$lendiam="lengths"
+
+
+dim(fdata)	
+
+### give a temp stem id for stem id=NA
+willow.levels=levels(as.factor(fdata$willid[is.na(fdata$stid)==T]))
+for (i in 1:length(willow.levels)) {
+	fdata$stid[fdata$willid==willow.levels[i] & is.na(fdata$stid)==T]=paste("tempid",i,sep="")
+}
+
+fdata$shtmeas=as.numeric(fdata$shtmeas)
+
+
+###WRITE OUT A TEXT FILE OF SHOOT MEASUREMENTS
+write.table(fdata,"OBS_shootCAGfall08-13.txt",row.names=F,quote=F)
+
+#fdata=read.table("/Users/Kristin/Google Drive/KM WORK/Yellowstone/Files For Kristin/Final Output Files/ObservationalSites/OBS_shootCAGfall08-13.txt", header=T)
+
+
+####calculate total stems in each year by plant
+willow.levels= levels(as.factor(fdata$willid))
+plstems=as.data.frame(matrix(NA,length(willow.levels)*13,4))
+names(plstems)=c("year","willid","stest","stcount")
+counter=1
+
+for (i in c(yearstart:yearend)){
+  temp=fdata[fdata$year==i,c(5,10:12,24,33)]
+  temp=drop.levels(temp)
+  willow.levels=levels(as.factor(temp$willid))
+  for (j in 1:length(willow.levels)) {
+    xtemp=temp[temp$willid==willow.levels[j],]
+    xtemp$stid=drop.levels(xtemp$stid)
+    stem.levels=levels(as.factor(xtemp$stid))
+    minstems=length(stem.levels)
+         
+    stems=xtemp$totstems[1]
+    plstems$stcount[counter]= stems
+    if (is.na(plstems$stcount[counter])){
+      lstdat=plstems[which(plstems$willid==willow.levels[j] & plstems$year==i-1),4]
+      
+      dead=max(xtemp$newdead, na.rm=T)
+      if (is.finite(dead)==F) dead=0
+      
+      newlive=max(xtemp$newlive, na.rm=T)
+      if (is.finite(newlive)==F) newlive=0
+      
+      if (length(lstdat)>0) {
+        if(is.na(lstdat)) lstdat=plstems[which(plstems$willid==willow.levels[j] & plstems$year==i-1),3]
+        plstems$stest[counter]=max(lstdat-dead+newlive, minstems)
+      }
+      
+      if  (length(lstdat)==0) plstems$stest[counter]=max(-dead+newlive,minstems)
+      
+        
+        
+    }
+    
+    plstems$year[counter]=i
+    plstems$willid[counter]=willow.levels[j]
+    counter=counter+1
+  
+  
+    
+}
+}
+
+
+##CREATE A DATAFRAME OF NUMBER OF STEMS ON EACH PLANT BY YEAR
+plstems=plstems[is.na(plstems$year)==F,]
+willow.levels=levels(as.factor(plstems$willid))
+stmat=as.data.frame(matrix(NA,length(willow.levels),13))
+names(stmat)=c("willid","2002","2003", "2004", "2005", "2006", "2007","2008","2009","2010","2011","2012","2013")
+
+for (i in 1:length(willow.levels)){
+  tempx=plstems[plstems$willid==willow.levels[i],]
+  stmat[i,1]=willow.levels[i]
+  for (j in c(yearstart:yearend)){
+      ncount=tempx[tempx$year==j,4]
+      nest= tempx[tempx$year==j,3]
+            
+      nst=ifelse(is.na(ncount), nest, ncount)
+      
+      if (length(nst)<1 & is.finite(stmat[willow.levels[i],j-2000-1])) nst=stmat[willow.levels[i],j-2000-1]
+      
+      if (length(nst)<1) nst=NA
+      
+      
+      stmat[i,j-2000]=nst
+      
+  
+}
+}
+    
+
+
+
+
+
+######################################
+# calculate fall CAG USING SHOOT REGRESSIONS
+######################################
+# log(wt) = -5.79 + 1.53*log(len)
+# log(wt) = -3.79 + 3.03*log(bdiam)
+######################################
+
+fdata=fdata[is.na(fdata$willid)==F & is.na(fdata$shtmeas)==F & fdata$shtmeas!=0,]
+
+
+# 1. convert individual shoot lengths to mass (log transform!!!)
+
+
+fdata$logshtmeas=log(fdata$shtmeas)
+fdata$logweight[fdata$lendiam=="lengths"]=-5.79+1.53*fdata$logshtmeas[fdata$lendiam=="lengths"]
+fdata$logweight[fdata$lendiam=="diameters"]=-3.79+3.03*fdata$logshtmeas[fdata$lendiam=="diameters"]
+fdata$weight=exp(fdata$logweight)
+#summary(fdata)	# 33 weight
+
+##calc weights from bigshtlen
+fdata$bigshtwt=exp(-5.79+1.53*log(fdata$bigshtlen))
+
+# 2. multiply mass by scheme
+# 3. sum shoot masses to stem level
+# 4. add remainder times average mass of shoot
+# get stem level data
+
+
+fstemdata=data.frame(year=NA,site=NA,plot=NA,species=NA,willid=NA,height=NA,stid=NA,scheme=NA,remain=NA,weight=NA, bigshtwt=NA, maxweight=NA, totstems=NA)
+for (i in yearstart:yearend) {
+	willow.levels=levels(as.factor(fdata$willid[fdata$year==i]))
+	for (j in 1:length(willow.levels)) {
+		stem.levels=levels(as.factor(fdata$stid[fdata$year==i & fdata$willid==willow.levels[j]]))
+		for (k in 1:length(stem.levels)) {
+			temp=fdata[fdata$year==i & fdata$willid==willow.levels[j] & fdata$stid==stem.levels[k],c(1:6,24,31:32,38:39)]
+			# rows of stid[k] of willid[j] of year i, 9 cols
+			if (length(temp[,1])>0) {
+			  ###statment to keep max shoot weight for each stem to compare in spring
+      	temp$maxweight[1]=max(temp$weight)
+        #temp$totstems[1]=NA ##
+        temp$totstems[1]=stmat[which(stmat$willid==willow.levels[j]),i-2000]
+        temp$weight[1]=(sum(temp$weight)*temp$scheme[1]+mean(temp$weight)*temp$remain[1]+temp$bigshtwt[1])
+				
+        fstemdata=rbind(fstemdata,temp[1,])
+				# add first row of temp/stid[k] data, plus calc'd stem weight, to stem level data
+			}
+		}
+	}
+}
+fstemdata=fstemdata[is.na(fstemdata$year)==F,]
+summary(fstemdata)
+dim(fstemdata)	# 4372 x 9
+
+#OUTPUT THE STEM-LEVEL DATA
+write.table(fstemdata,"OBS-stemCAGfall08-13.txt",row.names=F,quote=F)
+
+fstemdata=read.table("OBS-stemCAGfall08-13.txt", header=T)
+# 5. sum stems to plant
+fplantdata=data.frame(year=NA,site=NA,plot=NA,species=NA,willid=NA,height=NA,weight=NA)
+for (i in yearstart:yearend) {
+	willow.levels=levels(as.factor(fstemdata$willid[fstemdata$year==i]))
+	for (j in 1:length(willow.levels)) {
+		temp=fstemdata[fstemdata$year==i & fstemdata$willid==willow.levels[j],c(1:6,10,13)]
+		# rows of willid[j] of year i
+		if (length(temp[,1])>0) {
+			temp$weight[1]=sum(temp$weight)*temp$totstems[1]/length(temp[,1])
+			
+			##change this to just the stems measured in that year-- the totstems category is too unreliable
+			
+			# sum all (tagged) stems of willid[j]
+			fplantdata=rbind(fplantdata,temp[1,1:7])
+		}
+	}
+}
+fplantdata=fplantdata[is.na(fplantdata$year)==F,]
+summary(fplantdata)
+dim(fplantdata) # 1549 x 6
+
+#OUTPUT THE PLANT-LEVEL DATA
+write.table(fplantdata,"willowsOBS-plantCAGfall08-13.txt",row.names=F,quote=F)
+
+
+
+
+###########
+# spring DATA
+###########
+
+X = read.csv("/Users/kristin/dropbox/docbackup/YellowstoneWillowData/ST675project/DATA/UtilizationALLYEARS/OBSsprcag09.csv",header=T)
+
+for(i in c(10:11)) {
+   #if(i>9){
+    tempX=read.csv(paste("/Users/kristin/dropbox/docbackup/YellowstoneWillowData/ST675project/DATA/UtilizationALLYEARS/OBSsprcag",i,".csv",sep=""),header=T)
+  #  }
+  # if(i<10){tempX = read.csv(paste("/Users/kristin.marshall/Documents/YellowstoneWillowData/ST675project/DATA/UtilizationALLYEARS/sprcag0",i,".csv",sep=""),header=T) 
+     
+      #}
+   X = rbind(X, tempX)
+   
+}
+
+for(i in 12:13){
+	
+	tempX=read.csv(paste("/Users/kristin/Google Drive/KM WORK/Yellowstone/Files for Kristin/Reshuffle Output/obs_utilization20",i,"_reshuffleApr23.csv", sep=""),header=T)
+	X = rbind(X, tempX)
+}
+
+
+summary(X)
+
+sdata=X
+
+
+dim(sdata)	# 20151 x 19
+
+sdata=sdata[is.na(sdata$site)==F & is.na(sdata$willid)==F & is.na(sdata$meas1)==F & sdata$meas1!=0,]
+### delete obs. where BUBDB=DB
+#sdata=sdata[sdata$BUBDB!="DB",]
+summary(sdata)
+# willid 1-915
+# plantht 26-235, 6321 NA
+# stemid 1-67000
+# BrSch 0-137, 7397 NA -> NA=1 or UB
+# UBSch 0-22, 2923 NA -> NA=1 or B
+# Brem 0-4, 4471 NA -> NA=0 or UB
+# UBRem 0-9, 5820 NA -> NA=0 or B
+# B 3791, UB 14607, DB 0
+# meas1 0.2-88
+# meas2 0.4-25, 14607 NA
+
+sdata$site[sdata$site=="eb10"]="eb1" 
+sdata$site[sdata$site=="eb20"]="eb2" 
+sdata$site[sdata$site=="lost c"]="lostc"
+sdata$site[sdata$site=="lost l"]="lostl" 
+ 
+sdata$site[sdata$site=="elk 2"]="elk2" 
+
+sdata$species[sdata$species=="0"]=NA 
+
+sdata$plot=NA
+
+sdata=drop.levels(sdata)
+
+
+### set scheme/remain NAs appropriately --- one col. per
+
+sdata$BrSch[is.na(sdata$BrSch)]=1
+sdata$DBSch[is.na(sdata$DBSch)]=1
+sdata$UBSch[is.na(sdata$UBSch)]=1
+
+sdata$scheme[sdata$BUBDB=="B"]=sdata$BrSch[sdata$BUBDB=="B"]
+sdata$scheme[sdata$BUBDB=="UB"]=sdata$UBSch[sdata$BUBDB=="UB"]
+sdata$scheme[sdata$BUBDB=="DB"]=sdata$DBSch[sdata$BUBDB=="DB"]
+sdata$remain[sdata$BUBDB=="B"]=sdata$Brem[sdata$BUBDB=="B"]
+sdata$remain[sdata$BUBDB=="UB"]=sdata$UBRem[sdata$BUBDB=="UB"]
+sdata$remain[sdata$BUBDB=="DB"]=sdata$DBRem[sdata$BUBDB=="DB"]
+
+
+sdata$scheme[is.na(sdata$scheme)==T | sdata$scheme==0]=1
+sdata$remain[is.na(sdata$remain)==T]=0
+sdata$LngSht[is.na(sdata$LngSht)==T]=0
+summary(sdata)
+# scheme 1-137
+# remain 0-9
+
+
+
+
+##if basal measurement is less than tip, use basal for both measurements
+indx=which(sdata$BUBDB=="B" & sdata$meas2>sdata$meas1)
+sdata$meas2[indx]=sdata$meas1[indx]
+
+
+
+summary(sdata)
+dim(sdata)	# 18367 x 21
+
+#OUTPUT SHOOT LEVEL MEASUREMENTS
+write.table(sdata,"willows-shootOBSCAGspring2008-2013.txt",row.names=F,quote=F)
+
+###########################################################
+# calculate spring CAG left after winter
+###########################################################
+# UB: log(wt) = -5.79 + 1.53*log(len)
+#  B: log(wt) = -4.52 + 2.54*log(bdiam) + 0.95*log(dinc)
+###########################################################
+
+# 1. convert individual shoot lengths/diameters to mass (log transform!!!)
+# meas1 = length/tip diameter, meas2 = basal diameter
+sdata$loglength[sdata$BUBDB=="UB"]=log(sdata$meas1[sdata$BUBDB=="UB"])
+sdata$logbasdiam[sdata$BUBDB=="B"]=log(sdata$meas1[sdata$BUBDB=="B"])
+sdata$logdiaminc[sdata$BUBDB=="B"]=log(sdata$meas1[sdata$BUBDB=="B"]-sdata$meas2[sdata$BUBDB=="B"]+1)  ###changed this 12/31/10, was meas 2-1 before
+sdata$logweight[sdata$BUBDB=="UB"]=-5.79+1.53*sdata$loglength[sdata$BUBDB=="UB"]
+sdata$logweight[sdata$BUBDB=="B"]=-4.52+2.54*sdata$logbasdiam[sdata$BUBDB=="B"]+0.95*sdata$logdiaminc[sdata$BUBDB=="B"]
+sdata$weight=exp(sdata$logweight)
+sdata$weight[sdata$BUBDB=="DB"]=0
+sdata$lngshtwt=exp(-5.79+1.53*log(sdata$LngSht))
+
+summary(sdata) # 26 weight
+
+sdata$DBRem=as.numeric(sdata$DBRem)
+sdata$UBSch=as.numeric(sdata$UBSch)
+sdata$scheme=as.numeric(sdata$scheme)
+# 2. multiply mass by B/UB scheme
+# 3. sum B&UB shoot masses to stem level
+# 4. add B/UB remainder times average mass of B/UB shoot
+# 5. sum B&UB for each stem
+# get stem level data
+
+
+##Read in the fall stem-level data to compare fall to spring
+fstemdata=read.table("OBS-stemCAGfall08-13.txt",header=T)
+
+
+
+sstemdata=data.frame(year=NA,site=NA,plot=NA, species=NA,willid=NA,plantht=NA,stemid=NA,BUBDB=NA,scheme=NA,remain=NA,weight=NA, lngshtwt=NA, SUB=NA, numsht=NA, numbrows=NA, numDB=NA )
+for (i in c(2009:2013)) {
+  willow.levels=levels(as.factor(sdata$willid[sdata$year==i]))
+	for (j in 1:length(willow.levels)) {
+		stem.levels=levels(as.factor(sdata$stemid[sdata$year==i & sdata$willid==willow.levels[j]]))
+		for (k in 1:length(stem.levels)) {
+			temp=sdata[sdata$year==i & sdata$willid==willow.levels[j] & sdata$stemid==stem.levels[k],c(1:7,17,20:21,26:27)]
+			temp$SUB=0
+      temp$numsht=NA
+      temp$numbrows=NA
+      temp$numDB=NA
+      fyear=i-1    ##for fall of the previous year
+			maxweight=fstemdata$maxweight[fstemdata$year==fyear & fstemdata$willid==temp$willid[1] & fstemdata$stid==temp$stemid[1]]
+			
+      if (length(maxweight)>0){     ###if there is a match b/w stems from last fall and this spring
+        for (m in 1:nrow(temp)) {
+			     if (temp$weight[m]>maxweight) {     ####correct shoot weight to zero if it is larger than the maximum shoot weight on that stem last fall
+			       temp$weight[m]=0
+            }
+        }
+      }      
+      # rows of stemid[k] of willid[j] of year i, 11 cols
+			if (length(temp[,1])>0) {			
+				UBtemp=temp[temp$BUBDB=="UB",]
+				if (length(UBtemp[,1])>0) {
+					UBwt=sum(UBtemp$weight)*UBtemp$scheme[1]+mean(UBtemp$weight)*UBtemp$remain[1]+UBtemp$lngshtwt[1]
+				  numUB=length(UBtemp$weight)*UBtemp$scheme[1]+UBtemp$remain[1]
+        } else  {
+					UBwt=0	# do not want to take previous stem UBwt
+					numUB=0 }
+				
+        Btemp=temp[temp$BUBDB=="B",]
+				if (length(Btemp[,1])>0) {
+					Bwt=sum(Btemp$weight)*Btemp$scheme[1]+mean(Btemp$weight)*Btemp$remain[1]
+				  numB=length(Btemp$weight)*Btemp$scheme[1]+Btemp$remain[1]
+        } else {
+					Bwt=0		# do not want to take previous stem Bwt
+				  numB=0}
+			  
+        DBtemp=temp[temp$BUBDB=="DB",]
+        if (length(DBtemp[,1])>0) noDB=length(DBtemp[,1])*DBtemp$scheme[1]+DBtemp$remain[1] else noDB=0
+        
+        temp$weight[1]=UBwt+Bwt
+				temp$numsht[1]=numUB+numB+noDB
+        temp$numbrows[1]=numB
+        temp$numDB[1]=noDB
+        if(Bwt==0 & numB<1 & noDB<1) temp$SUB[1]=1
+				sstemdata=rbind(sstemdata,temp[1,])
+			}
+		}
+	}
+}
+
+sstemdata=sstemdata[is.na(sstemdata$year)==F,]
+summary(sstemdata)
+dim(sstemdata)	# 2303 x 10
+write.table(sstemdata,"OBS-stemCAGspring2008-2013.txt",row.names=F,quote=F)
+
+# 5. sum stems to plant
+splantdata=data.frame(year=NA,site=NA,plot=NA, species=NA,willid=NA,plantht=NA,weight=NA, SUB=NA, numsht=NA, numbrows=NA, numDB=NA )
+for (i in c(2009:2013)) {
+	willow.levels=levels(as.factor(sstemdata$willid[sstemdata$year==i]))
+	for (j in 1:length(willow.levels)) {
+		temp=sstemdata[sstemdata$year==i & sstemdata$willid==willow.levels[j],c(1:6,11,13:16)]
+		totstems=stmat[which(stmat$willid==willow.levels[j]),i-2001]
+		if (length(totstems)<1) totstems=0
+    # rows of willid[j] of year i
+		if (length(temp[,1])>0) {
+			temp$weight[1]=sum(temp$weight)*totstems/length(temp[,1])
+			temp$SUB[1]=sum(temp$SUB)
+			temp$numsht[1]=sum(temp$numsht)
+			temp$numbrows[1]=sum(temp$numbrows)
+			temp$numDB[1]=sum(temp$numDB)
+			# sum all (tagged) stems of willid[j]
+			splantdata=rbind(splantdata,temp[1,])
+		}
+	}
+}
+splantdata=splantdata[is.na(splantdata$year)==F,]
+summary(splantdata)
+dim(splantdata) # 879 x 6
+write.table(splantdata,"OBS-plantCAGspring2009-2013.txt",row.names=F,quote=F)
+
+
+############################################
+# calculate BI(k,t) for plant k at time t
+############################################
+
+#########
+# willows-plantCAGfall2002-2007.txt & willows-plantCAGspring2003-2006.txt
+fpltdata=read.table("willowsOBS-plantCAGfall08-13.txt",header=T)
+names(fpltdata)	# "year"    "site"    "species" "willid"  "height"  "weight"
+spltdata=read.table("OBS-plantCAGspring2009-2013.txt",header=T)
+#names(spltdata)=c("year","site","species","willid","height","weight")
+summary(fpltdata)
+summary(spltdata)
+dim(fpltdata)	
+dim(spltdata)	
+
+length(intersect(levels(as.factor(fpltdata$willid[fpltdata$year==2008])),levels(as.factor(spltdata$willid[spltdata$year==2009]))))
+length(intersect(levels(as.factor(fpltdata$willid[fpltdata$year==2009])),levels(as.factor(spltdata$willid[spltdata$year==2010]))))
+length(intersect(levels(as.factor(fpltdata$willid[fpltdata$year==2010])),levels(as.factor(spltdata$willid[spltdata$year==2011]))))
+length(intersect(levels(as.factor(fpltdata$willid[fpltdata$year==2011])),levels(as.factor(spltdata$willid[spltdata$year==2012]))))
+length(intersect(levels(as.factor(fpltdata$willid[fpltdata$year==2012])),levels(as.factor(spltdata$willid[spltdata$year==2013]))))
+
+
+### set up data to get BI(k,t)=1-SCAG(t)/FCAG(t-1) for k plants and t=2003,...,2006
+### is the willow measured in both fall and spring?
+BIdata=data.frame(year=NA,site=NA,plot=NA, species=NA,willid=NA,FCAG=NA,SCAG=NA,BI=NA)
+for (i in c(2009:2013)) {
+	  indx=intersect(levels(as.factor(fpltdata$willid[fpltdata$year==(i-1)])),levels(as.factor(spltdata$willid[spltdata$year==i])))
+	# willid that are measured in fall i-1 and spring i
+	for (j in 1:length(indx)) {
+		temp=spltdata[spltdata$year==i & spltdata$willid==indx[j],1:5]
+		# row of willid=indx[j] of year i, cols year/site/species/willid
+		fcag=fpltdata$weight[fpltdata$year==(i-1) & fpltdata$willid==indx[j]]
+		scag=spltdata$weight[spltdata$year==i & spltdata$willid==indx[j]]
+		bi=max(0,1-scag/fcag)
+		BIdata=rbind(BIdata,cbind(temp[1,],FCAG=fcag,SCAG=scag,BI=bi))
+	}
+}
+BIdata=BIdata[is.na(BIdata$year)==F,]
+summary(BIdata)
+dim(BIdata)	
+write.table(BIdata,"OBSwillows-plantBI2009-2013.txt",row.names=F,quote=F)
+
+```
+
+

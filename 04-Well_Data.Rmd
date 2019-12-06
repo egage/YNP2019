@@ -1,0 +1,2293 @@
+# Well Data - Manual Measurements
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+**Updated:** `r format(Sys.time(), '%d %B, %Y')`
+
+## Introduction  
+
+This section provides a basic interrogation of the manual well measurement data archived on the "Digital Collections of Colorado" (DCC) library site: [Well Measurement Data 2001 - 2015](https://dspace.library.colostate.edu/handle/10217/176158). The assumption was that the DCC data set represents the canonical version of the water table data, to which updates from 2015-2018 should be added. However, there are errors in the DCC repository that also need to be addressed before attempting to update with more recent data.
+
+These analyses are aimed at characterizing basic data structure and identifying potential issues such as:
+
+* Inconsistently named factors such as site name or well ID    
+* Missing values  
+* Data values outside of expected range or showing unusual patterns
+
+Tables and figures are primarily for facilitating QA/QC and data exploration. The end goal of this section is to develop and refine reproducible code for cleaning data and producing new archivable files for further analyses.
+
+
+```{r,echo=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+library(fs)
+suppressPackageStartupMessages(library(sf))
+# library(raster)
+library(janitor)
+library(readxl)
+# library(devtools)
+# install_github("mtennekes/tmaptools")
+# install_github("mtennekes/tmap")
+# suppressPackageStartupMessages(library(tmap))
+# library(tmaptools)
+suppressPackageStartupMessages(library(mapview))
+# library(ggmap)
+# library(ggrepel)
+suppressPackageStartupMessages(library(viridis))
+library(ggExtra)
+library(DT)
+library(lubridate)
+library(kableExtra)
+suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(naniar))
+# suppressPackageStartupMessages(library(trelliscopejs))
+suppressPackageStartupMessages(library(textclean))
+
+library(gt)
+
+# install.packages("webshot") ## this is by ref to a SO post. With this and the next line, I should be be able to render as pdf. HTML widget content like DT::datatables should render as screen shots...
+# webshot::install_phantomjs()
+
+```
+
+## Data Import and Initial Assessment
+
+### 2001-2014 (DCC Collection)
+
+
+**Exploratory analyses**
+
+```{r, message=FALSE, warning=FALSE}
+wt.nsf <- read_tsv("data/NSF_DataArchive20180208/Well_measurement_data2001-2015/Yell_Well_Data_Manual2001_2015.txt")
+
+wt.nsf.meta <- read_csv("data/NSF_DataArchive20180208/Well_measurement_data2001-2015/Yell_Well_Data_Manual2001_2015_METADATA.csv")
+
+```
+
+**Field names from metadata file on DCC repository site**
+
+This is a direct reading of the metadata file in the DCC site.
+
+```{r, warning=FALSE}
+wt.nsf.meta %>%
+  datatable()
+  # knitr::kable()
+
+```
+
+> **Questions/Issues:**    
+> 1. How are staff gauge data recorded? Is this a corrected elevation or a distance from the gauge (t-post?) top?   
+> 2. What are the sources of x, y and z coordinates? Interogating the many folders of data, I found reference to total station survey work (from DK and earlier), but also GPS and (maybe) GIS-derived elevations floating about (e.g., pulled off of DEM). Do we have any info on how z-coordinates were obtained?    
+> 3. There is no "Site" in the metadata table
+
+**Comparison of missing values among fields (_missing_)**
+
+```{r}
+# Make "Wat_ID" a character, convert "Date" to from char to date format...
+wt.nsf <- wt.nsf %>% 
+  # mutate(Wat_ID = as.character(Wat_ID)) %>% 
+  mutate(Date = lubridate::mdy(Date))
+
+# use some functions in skimr pkg to evaluate missing values.
+s1 <- skimr::skim(wt.nsf)
+# s1 %>% 
+#   filter(stat=="missing") %>% 
+#   select(-c(level,formatted)) %>%
+#   arrange(-value) %>% 
+#   datatable()
+
+# the naniar package also has some nice features...
+# visualize type
+
+visdat::vis_dat(wt.nsf)
+
+```
+
+
+> **Questions/Issues:**    
+> 1. There are different levels of "missingness" between fields. Fields such as "abslevel", "JULIAN_DAY" have the most missing values, but other fields also have issues...       
+
+```{r, eval=FALSE}
+# **Comparison of the number of unique values among fields (_n unique_)**
+# 
+# The site and site2 fields differ in how they encode treatments. "Site" explicitly encodes treatments (e.g., DC, DX, etc.); "Site2" leaves these out. BUT, not consistent...
+
+s1 %>% 
+  filter(stat=="n_unique") %>% 
+  select(-c(level,formatted)) %>% 
+  datatable()
+# > **Questions/Issues:**    
+# > 1. Which concept of site ("Site" vs. "Site2") should be used going forward? From disucssions on 2018-02-22, the "Site2" approach (once error-corrected) seems like the way?       
+# > 2. How do the different Site ID approaches relate to well ID's? are these unique to "Site", "Site2", or globally distinct? 
+```
+
+ 
+```{r, eval=FALSE}
+
+# **Count of observations: Site**
+## distinct "Site"
+wt.nsf %>%
+  tabyl(Site) %>% 
+  datatable()
+# > **Questions/Issues:**    
+# > 1. What are "ElkNA", "WBNA", and "EB1NA" records?   
+
+```
+
+
+```{r, eval= FALSE}
+
+
+# **Count of observations: Site2**
+## distinct "Site2"
+wt.nsf %>%
+  tabyl(Site2) %>% 
+  datatable()
+
+# > **Questions/Issues:**    
+# > 1. I'm presuming the variations on EB2 (e.g., EB2CC, EB2CX, etc) should be folded into EB2?  
+# > 2. "eb2" should be converted to "EB2"; "eb1" should be converted to "EB1"
+
+```
+
+
+
+```{r, eval=FALSE}
+
+# **Count of observations: Plot**
+## distinct "plot"
+wt.nsf %>%
+  tabyl(Plot) %>% 
+  select(-valid_percent) %>% 
+  knitr::kable()
+
+# > **Questions/Issues:**    
+# > 1. Note presence of two flavors of null: "null" and "Null". Should both of these be "OBS" or is this a place to break out "OBS" vs "Beaver"? 
+
+```
+
+**Some cross-tabulations...**
+
+The following cross-tabulations are meant to provide some insights into data structure and diagnose potential problems. 
+
+
+```{r, eval = FALSE}
+
+# ** cross-tabulation: Site vs. Plot**
+
+wt.nsf %>% 
+  tabyl(Site,Plot) %>%
+  datatable(rownames = FALSE, caption = "Count of observations")
+
+# > **Questions/Issues:**    
+# > 1. Note presence of two flavors of null: "null" and "Null". See note above...  
+# > 2. Also note presence of NA. 
+# > 3. What is "EB1NA" referring to?    
+
+```
+
+     
+
+
+```{r, eval=FALSE}
+
+# **cross-tabulation: Site2 vs. Plot**
+  wt.nsf %>% 
+  tabyl(Site2,Plot) %>% 
+  datatable(caption = "Count of observations")
+
+# > **Questions/Issues:**    
+# > 1. Note miscoded Site2 entries. For example, there is "eb1" and "EB1"    
+# > 2. "Site" looks like it is supposed to explicitly encode treatment and "Site2" is not; however, see the "Site2" entry for "EB2CC", etc. Some errors appear to be present...    
+# > 3. Similar issue as noted above regarding the null and NA values. 
+
+```
+   
+
+
+```{r, eval=FALSE}
+
+# ** cross-tabulation: Site2 vs. Year**
+wt.nsf %>% 
+  # names()
+  tabyl(Site2,Year) %>%
+  datatable(rownames = FALSE, caption = "Count of observations")
+
+# > **Questions/Issues:**    
+# > 1. Were data collected in in 2007? Perhaps these are the "1900" data...       
+
+```
+
+
+```{r, eval=FALSE}
+
+# ** cross-tabulation: Wat_ID2 vs. Year**
+wt.nsf %>% 
+  tabyl(Wat_ID2,Year) %>%
+  datatable(rownames = FALSE, caption = "Count of observations")
+
+# > **Questions/Issues:**    
+# > 1. "1900" data...  
+# > 2. The use of site and well IDs seem wonky in places. Can these be tied to field books? What should be considered "canonical"?   
+```
+
+
+
+
+```{r, eval = FALSE}
+
+# ** cross-tabulation: Wat_ID2 vs. Site2**
+wt.nsf %>% 
+  tabyl(Wat_ID2,Site2) %>% 
+  datatable(rownames = FALSE)
+
+# > **Questions/Issues:**    
+# > 1. Are these supposed to 2007 data?   
+# > 2. Where would the original data be housed? Field books, data files,?...   
+
+```
+
+
+
+```{r, eval=FALSE}
+
+
+# **Count of observations by Wat_ID2, Site2, and Date**
+# x.d <- wt.nsf %>% 
+#   tabyl(Date, Wat_ID2,Site2)
+
+wt.nsf %>% 
+  group_by(Date, Wat_ID2,Site2) %>% 
+  tally() %>% 
+  filter(n>1) %>% 
+  datatable(rownames = FALSE)
+
+# > **Questions/Issues:**    
+# > 1. I would assume that for any given site and well id, there would only be 1 observation per date. But, there are 67 cases where n = 2.   
+
+```
+
+
+```{r, eval=FALSE}
+# **Distinct Wat_ID2** 
+# distinct wat_ID2
+wt.nsf %>% 
+  group_by(Site2) %>% 
+  distinct(Wat_ID2) %>% 
+  datatable(rownames = FALSE)
+# **note:** _error in encoding still present_
+
+```
+
+#### Graphical crap detection
+**Heat map: count of observations by "Wat_ID2" and "Site2"**
+
+```{r, fig.height=24, fig.width=9}
+
+wt.nsf %>% 
+  # names()
+  tabyl(Wat_ID2,Site2) %>%
+  gather(key = Site2,value = cnt,-Wat_ID2) %>% 
+  ggplot(aes(Site2,Wat_ID2)) +
+  geom_tile(aes(fill=cnt), color="grey") +
+  # scale_fill_gradient(low = "white", high = "darkred") +
+  scale_fill_gradient2(low = "white", mid = "blue", high = "red", midpoint = 45, space = "Lab", na.value = "grey50", guide = "colourbar") +
+  # scale_fill_viridis() +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+
+```
+
+> **Questions/Issues:**    
+> 1. Note NA values. Figure out which sites and decide whether to keep or drop...     
+> 2. Check what's up with "Eunlabeled". Can this be recovered as valid data or does it need to be dropped?   
+> 3. What's the significance of the hyphenated ID's (e.g., O47-1 and O47-2)?    
+> 4. Does the pattern of "missingness" match expectations?    
+
+**Heat map: count of observations by Wat_ID2 and year EXCLUDING the data labelled with Year<2001**
+
+```{r, fig.height=24, fig.width=9}
+# s1
+wt.nsf %>% 
+  group_by(Wat_ID2, Year) %>%
+  summarise(cnt = n()) %>%
+  filter(Year>2000) %>% 
+  ggplot(aes(Year, Wat_ID2)) +
+  geom_tile(aes(fill=cnt), color='white') +
+  scale_fill_viridis() +
+  theme_bw() +
+  labs(y="") +
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+
+```
+
+> **Questions/Issues:**    
+> 1. Note the missing 2007 data.     
+> 2. How does the pattern of "missingness" match expectations?    
+
+```{r, fig.height=30, fig.width=9, eval=FALSE}
+
+# **"E" wells/staff gauges -- jitter plots**
+# exp plots - box plot
+# wt.nsf %>% 
+#   group_by(Wat_ID2) %>%
+#   mutate(cnt.WatID = n()) %>%
+#   filter(Year>2000) %>%
+#   mutate(Year = as.character(Year)) %>%
+#   filter(str_detect(Wat_ID2, "E")) %>% 
+#   # filter(cnt.WatID > 3 & rellevel < 999) %>% 
+#   # ggplot(aes(Date,rellevel)) +
+#   ggplot(aes(Year,rellevel)) + 
+#   geom_boxplot(aes(group=Year)) +
+#   facet_wrap(~Wat_ID2, ncol=5, scales = "free") +
+#   theme(axis.text.x=element_text(angle=45, hjust=1))
+
+## exp wells - jitter
+wt.nsf %>% 
+  group_by(Wat_ID2) %>%
+  mutate(cnt.WatID = n()) %>%
+  filter(Year>2000) %>%
+  mutate(Year = as.character(Year)) %>%
+  filter(str_detect(Wat_ID2, "E")) %>% 
+  # filter(cnt.WatID > 3 & rellevel < 999) %>% 
+  # ggplot(aes(Date,rellevel)) +
+  ggplot(aes(Year,rellevel)) + 
+  geom_jitter(width = 0.15, height = 0.15, aes(color = Year)) +
+  # geom_point(color="darkblue", alpha=0.1,position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.2)) +
+  # geom_boxplot(aes(group=Year)) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  facet_wrap(~Wat_ID2, ncol=4, scales = "free") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=7, angle=75, hjust = 1))
+
+# > **Questions/Issues:**    
+# > 1. Seem to be a fairly large number of questionable values. Individual outliers need to be examined more closely (e.g., E199 in 2013, E2 in 2011, etc.). Are these data entry errors, artifacts from the rescaling process, ??          
+# > 2. Issues with some specific wells/gauges more clearly seem to be related to the rescaling (e.g., E25)   
+# > 3. What's with the wells with more limited records (e.g., E300 has only two years of data. Why? Was this installed for a specific and limited purpose or is this an issue with well IDs?)  
+
+```
+
+
+```{r, fig.height=28, fig.width=9, eval=FALSE}
+
+# ** "O" wells/staff gauges -- jitter plots**
+
+## obs wells - jitter
+wt.nsf %>% 
+  group_by(Wat_ID2) %>%
+  mutate(cnt.WatID = n()) %>%
+  filter(Year>2000) %>%
+  mutate(Year = as.character(Year)) %>%
+  filter(str_detect(Wat_ID2, "O")) %>% 
+  # filter(cnt.WatID > 3 & rellevel < 999) %>% 
+  # ggplot(aes(Date,rellevel)) +
+  ggplot(aes(Year,rellevel)) + 
+  geom_jitter(width = 0.15, height = 0.15, aes(color = Year)) +
+  # geom_point(color="darkblue", alpha=0.1,position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.2)) +
+  # geom_boxplot(aes(group=Year)) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  facet_wrap(~Wat_ID2, ncol=5, scales = "free") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=7, angle=75, hjust = 1))
+
+# > **Questions/Issues:**    
+# > 1. Seem to be a fairly large number of questionable values. Individual outliers need to be examined more closely (e.g., O1 in 2013, O10 in 2014, O11 in 2014). Are these data entry errors, artifacts from the relativization process, ??     
+# > 2. Issues with some specific wells/gauges more clearly seem to be related to the rescaling (e.g., O200, O21_2)  
+# > 3. Why do some wells have such short records? I'm assuming some might be new (e.g., O122, which has observations only in 2014), but then there are the issues of wells/gauges that blink in and out. For example:ODP1 (2013 only), O42 (2008-2011), etc. **Have well numbers been changed over the duration of the study?**
+```
+
+#### Spatial plotting of the 2001-2015 DCC well data set
+
+```{r, echo=FALSE, eval=FALSE}
+
+# create sf bject from coordinates. [Note: doesn't work b/c of missing x,y data]
+# wt.nsf.sf <- st_as_sf(x = wt.nsf,
+#                       coords = c("Y","X"),
+#                       crs = "+proj=utm +zone=12 +ellps=GRS80 +datum=NAD83 +units=m +no_defs")
+
+```
+
+Create a sf representation of the wells/staff gauges from coordinates and plot.
+
+* Note: Received the following error: _"Error in st_as_sf.data.frame(x = wt.nsf, coords = c("Y", "X"), crs = "+proj=utm +zone=12 +ellps=GRS80 +datum=NAD83 +units=m +no_defs") : 
+  missing values in coordinates not allowed"_   
+* Inspection of the full data set found 71 records with missing x,y,z values.  
+* Some records also have bogus coordinates (e.g., "999")
+  
+```{r}
+## find missing
+wt.nsf %>% 
+  filter(is.na(X) | is.na(Y) | X == "999" | Y == "999") %>%
+  datatable(caption = "Records with missing/bogus x or y coordinates.")
+
+```
+
+
+```{r}
+# create sf object from coordinates. This time, filtering out records with missing x,y
+wt.nsf.sf <- wt.nsf %>% 
+  filter(!is.na(X)) %>% 
+  filter(!is.na(Y)) %>% 
+  filter(X != "999") %>% 
+  st_as_sf(.,
+           coords = c("X","Y"),
+           crs = "+proj=utm +zone=12 +ellps=GRS80 +datum=NAD83 +units=m +no_defs")
+
+```
+
+
+```{r, eval = FALSE, fig.align="center"}
+# ** Map of wells/gauges from DCC dataset**
+# 
+# _Note: Records with missing/bogus coordinates removed._
+## opentopo
+# mapview(wt.nsf.sf,map.types = "OpenTopoMap", zcol = "Wat_ID2", alpha = 0.12, legend = FALSE)
+
+## opentopo + imagery options
+mapview(wt.nsf.sf, map.types = c("OpenTopoMap","Esri.WorldImagery"), zcol = "Wat_ID2", alpha = 0.12, legend = FALSE)
+
+
+```
+
+
+```{r, eval = FALSE}
+
+# ** Locations of Sites/wells with records with a date of "1/1/1900"**
+
+## Locations of the "1900" values
+wt.nsf.sf %>%
+  filter(Year == "1900") %>%
+  mapview(., map.types = c("OpenTopoMap","Esri.WorldImagery"), zcol = "Wat_ID2", alpha = 0.12, legend = FALSE)
+
+# Seem to be scattered widely...
+
+```
+
+
+```{r, eval=FALSE}
+
+# ** Sites/wells with records with a date of "1/1/1900"**
+wt.nsf %>%
+  filter(Year <= 2000) %>% 
+  select(1:4,Site_Typ,Wat_ID2,Wat_Type) %>% 
+  datatable()
+
+# These need to be fixed...
+
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+
+#### Hunting for duplicates
+# View(wt.nsf)
+wt.nsf %>% 
+  get_dupes(Site,Site2, Plot)
+
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+
+### Plotting
+
+head(wt.nsf)
+
+wt.nsf %>% 
+  # filter(Site2 == "EB2") %>% 
+  ggplot(aes(Date,rellevel)) +
+  # geom_line(aes(color=Wat_ID2)) +
+  geom_line() +
+  facet_wrap(~Wat_ID2)
+
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+
+names(wt.nsf)
+
+wt.nsf %>%
+  tabyl(Plot)
+  # as.data.frame() %>% 
+
+wt.nsf %>% 
+  crosstab(Site, Plot)
+
+wt.nsf %>% 
+  tabyl(Site2, Wat_Type) %>%
+  adorn_totals("row")
+
+mtcars %>%
+  crosstab(am, cyl) %>%
+  adorn_totals("row")
+
+```
+
+```{r, eval=FALSE, echo=FALSE}
+
+wells <- sf::st_read("data/Select_files/wells_spatial/Yell_Wells.shp", quiet = TRUE)
+
+wells %>% 
+  as.tibble() %>% 
+  select(WAT_ID2) %>% 
+  datatable()
+
+# plot 
+mapview(wells,map.types = "Esri.WorldImagery", zcol = "Type", alpha = 0.12, legend = TRUE)
+
+
+```
+
+```{r, eval=FALSE, echo=FALSE}
+
+willows.geo <- st_read("data/Select_files/wells_spatial/Willow_Geo.shp",quiet = TRUE)
+
+mapview(willows.geo,map.types = "Esri.WorldImagery", zcol = "maxhtall", alpha = 0.12, legend = TRUE)
+
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+## interesting example of adding wms tile
+
+library(mapview)
+library(leaflet)
+library(sp)
+#reproducible example; probably will need to view in browser (and zoom out to see any NEF)
+data.frame(lon=-84, lat=34)%>%
+  SpatialPointsDataFrame(data=data.frame(f="foo"),proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")) %>%
+  mapview() -> m
+m@map = m@map %>% 
+  addWMSTiles(group="TWI", baseUrl="https://geoplatform1.epa.gov/arcgis/services/NEF/WetnessIndex/MapServer/WMSServer?", layers = "0", options = WMSTileOptions(format = "image/png", transparent = TRUE), attribution = "EPA") %>%
+  addWMSTiles(group="NEF", baseUrl="https://geoplatform1.epa.gov/arcgis/services/NEF/NationalEcologicalFramework/MapServer/WMSServer?", layers = c("1","2","3"), options = WMSTileOptions(format = "image/png", transparent = TRUE), attribution = "EPA") %>%
+  addWMSTiles(group="NLCD", baseUrl="http://isse.cr.usgs.gov/arcgis/services/LandCover/USGS_EROS_LandCover_NLCD/MapServer/WMSServer?",layers = c("1","6"), options = WMSTileOptions(format = "image/png", transparent = TRUE), attribution = "USGS") %>%
+  mapview:::mapViewLayersControl(names = c("TWI","NEF","NLCD"))
+
+```
+
+#### Data cleaning
+
+**Task: Make encoding of Site2 consistent**
+
+The site and site2 fields differ in how they encode treatments. "Site" explicitly encodes treatments (e.g., DC, DX, etc.); "Site2" leaves these out. BUT, not consistent...
+
+```{r, eval=FALSE}
+## create a site lookup
+
+site.lu <- wt.nsf %>% 
+  distinct(Site) %>% 
+  janitor::clean_names() %>% 
+  mutate(Site2 = site)
+
+site.lu <- site.lu %>% 
+  mutate(Site2 = case_when(Site2 == "eb1" ~ "EB1",
+                           Site2 == "eb2" ~ "EB2",
+                           Site2 == "EB2CC" ~ "EB2",
+                           Site2 == "EB2CX" ~ "EB2",
+                           Site2 == "EB2DC" ~ "EB2",
+                           Site2 == "EB2DX" ~ "EB2",
+                           Site2 == "ElkCC" ~ "Elk",
+                           Site2 == "ElkCX" ~ "Elk",
+                           Site2 == "ElkDC" ~ "Elk",
+                           Site2 == "ElkDX" ~ "Elk",
+                           Site2 == "ElkNA" ~ "Elk",
+                           Site2 == "WBCC" ~ "WB",
+                           Site2 == "WBCx" ~ "WB",
+                           Site2 == "WBDC" ~ "WB",
+                           Site2 == "WBDX" ~ "WB",
+                           Site2 == "WBNA" ~ "WB",
+                           TRUE ~ as.character(Site2))) %>% 
+  rename(site2 = Site2) %>%
+  mutate(site3 = tolower(site2))
+  
+
+# View(site.lu)
+
+# write to csv that I can modify to create the 'master' lookup. I've inlcuded many variants, but others may be identified. 
+
+# site.lu %>% 
+#   gather(key = key,value = value) %>% 
+#   distinct(value) %>% 
+#   arrange(value) # %>% 
+#   # write.csv("data/site_lookup_master.csv") # Don't re-run. Expanding the list of corrections through a shared spreadsheet developed from the original export. 
+
+```
+
+
+```{r}
+
+
+wt.nsf %>% 
+  mutate(Site2 = case_when(Site2 == "eb1" ~ "EB1",
+                           Site2 == "eb2" ~ "EB2",
+                           Site2 == "EB2CC" ~ "EB2",
+                           Site2 == "EB2CX" ~ "EB2",
+                           Site2 == "EB2DC" ~ "EB2",
+                           Site2 == "EB2DX" ~ "EB2",
+                           Site2 == "ElkCC" ~ "Elk",
+                           Site2 == "ElkCX" ~ "Elk",
+                           Site2 == "ElkDC" ~ "Elk",
+                           Site2 == "ElkDX" ~ "Elk",
+                           Site2 == "ElkNA" ~ "Elk",
+                           Site2 == "WBCC" ~ "WB",
+                           Site2 == "WBCx" ~ "WB",
+                           Site2 == "WBDC" ~ "WB",
+                           Site2 == "WBDX" ~ "WB",
+                           Site2 == "WBNA" ~ "WB",
+                           TRUE ~ as.character(Site2)))
+
+
+# recode the "Site2"
+wt.nsf <- wt.nsf %>% 
+  mutate(Site2 = case_when(Site2 == "eb1" ~ "EB1",
+                           Site2 == "eb2" ~ "EB2",
+                           Site2 == "EB2CC" ~ "EB2",
+                           Site2 == "EB2CX" ~ "EB2",
+                           Site2 == "EB2DC" ~ "EB2",
+                           Site2 == "EB2DX" ~ "EB2",
+                           Site2 == "ElkCC" ~ "Elk",
+                           Site2 == "ElkCX" ~ "Elk",
+                           Site2 == "ElkDC" ~ "Elk",
+                           Site2 == "ElkDX" ~ "Elk",
+                           Site2 == "ElkNA" ~ "Elk",
+                           Site2 == "WBCC" ~ "WB",
+                           Site2 == "WBCx" ~ "WB",
+                           Site2 == "WBDC" ~ "WB",
+                           Site2 == "WBDX" ~ "WB",
+                           Site2 == "WBNA" ~ "WB",
+                           TRUE ~ as.character(Site2))) 
+
+
+
+
+
+```
+
+There remain records with "NA" in the site field.
+
+```{r}
+### Site has records with NA in the name.
+# distinct site
+# wt.nsf %>% 
+#   distinct(Site) %>% 
+#   View()
+
+wt.nsf %>% 
+  filter(str_detect(Site, "NA$")) # filters all the records ending in "NA"
+
+```
+
+
+```{r, eval=FALSE}
+
+# **Distinct Well ID (Wat_ID2) across sites (Site2)**
+wt.nsf %>% 
+  # names()
+  select(Site2, Wat_ID2) %>% 
+  group_by(Site2, Wat_ID2) %>% 
+  distinct() %>% 
+  arrange(Site2, Wat_ID2) %>% 
+  # write_csv("output/NSF01-15_distinct_wellID.csv") %>% # write csv for Lewis
+  datatable()
+  
+```
+
+
+```{r}
+# reclass the DCC well data from earlier
+
+wt.nsf <- wt.nsf %>%
+  janitor::clean_names() %>% 
+  filter(!is.na(site)) %>% # there's a site with "NA"for name. Dropping it.
+  # mutate(site = site) %>%
+  mutate(site = stringr::str_trim(.$site, side = "both")) %>% ## trim off whitespace
+  mutate(site = case_when(
+    site == 'Crescent' ~  'Crescent-OBS' ,
+    site == 'Cressent' ~  'Crescent-OBS' ,
+    site == 'Crystal' ~  'XTal1-OBS' ,
+    site == 'EB1' ~  'EB1-OBS' ,
+    site == 'EB1 CC' ~  'EB1-CC' ,
+    site == 'EB1 CX' ~  'EB1-CX' ,
+    site == 'EB1 DC' ~  'EB1-DC' ,
+    site == 'EB1 DX' ~  'EB1-DX' ,
+    site == 'EB1CC' ~  'EB1-CC' ,
+    site == 'EB1CX' ~  'EB1-CX' ,
+    site == 'EB1DC' ~  'EB1-DC' ,
+    site == 'EB1DX' ~  'EB1-DX' ,
+    site == 'EB2' ~  'EB2-OBS' ,
+    site == 'EB2 CC' ~  'EB2-CC' ,
+    site == 'EB2 CX' ~  'EB2-CX' ,
+    site == 'EB2 DC' ~  'EB2-DC' ,
+    site == 'EB2 DX' ~  'EB2-DX' ,
+    site == 'EB2 obs' ~  'EB2-OBS' ,
+    site == 'EB2_Obs' ~  'EB2-OBS' ,
+    site == 'EB2CC' ~  'EB2-CC' ,
+    site == 'EB2CX' ~  'EB2-CX' ,
+    site == 'EB2DC' ~  'EB2-DC' ,
+    site == 'EB2DX' ~  'EB2-DX' ,
+    site == 'EB2OBS' ~  'EB2-OBS' ,
+    site == 'EBT1CC' ~  'EB1-CC' ,
+    site == 'EBT1CX' ~  'EB1-CX' ,
+    site == 'EBT1DC' ~  'EB1-DC' ,
+    site == 'EBT1DX' ~  'EB1-DX' ,
+    site == 'Elk 5' ~  'Elk5-OBS' ,
+    site == 'Elk1' ~  'Elk1-OBS' ,
+    site == 'ELK1' ~  'Elk1-OBS' ,
+    site == 'Elk2' ~  'Elk2-OBS' ,
+    site == 'ELK2' ~  'Elk2-OBS' ,
+    site == 'Elk3' ~  'Elk3-OBS' ,
+    site == 'ELK3' ~  'Elk3-OBS' ,
+    site == 'Elk4' ~  'Elk4-OBS' ,
+    site == 'ELK4' ~  'Elk4-OBS' ,
+    site == 'Elk5' ~  'Elk5-OBS' ,
+    site == 'ELK5' ~  'Elk5-OBS' ,
+    site == 'ElkCC' ~  'Elk1-CC' , #assuming all 'elk' are 'elk1'
+    site == 'ELKCC' ~  'Elk1-CC' ,
+    site == 'ElkCX' ~  'Elk1-CX' ,
+    site == 'ELKCX' ~  'Elk1-CX' ,
+    site == 'ElkDC' ~  'Elk1-DC' ,
+    site == 'ELKDC' ~  'Elk1-DC' ,
+    site == 'ElkDX' ~  'Elk1-DX' ,
+    site == 'ELKDX' ~  'Elk1-DX' ,
+    site == 'G hole' ~  'Ghole-OBS' ,
+    site == 'Ghole' ~  'Ghole-OBS' ,
+    site == 'GHOLE' ~  'Ghole-OBS' ,
+    site == 'Glen' ~  'Glen-OBS' ,
+    site == 'GLEN' ~  'Glen-OBS' ,
+    site == 'Hailbuff' ~  'Hailbuf-OBS' ,
+    site == 'HAILBUFF' ~  'Hailbuf-OBS' ,
+    site == 'Lava' ~  'Lava-OBS' ,
+    site == 'LAVA' ~  'Lava-OBS' ,
+    site == 'LB1' ~  'LB1-OBS' ,
+    site == 'LB2' ~  'LB2-OBS' ,
+    site == 'LB3' ~  'LB3-OBS' ,
+    site == 'LB4' ~  'LB4-OBS' ,
+    site == 'LB5' ~  'LB5-OBS' ,
+    site == 'Lost creek' ~  'LostCr-OBS' ,
+    site == 'Lost Creek' ~  'LostCr-OBS' ,
+    site == 'Lost Lake' ~  'LostLk-OBS' ,
+    site == 'Lost lake' ~  'LostLk-OBS' ,
+    site == 'LostC' ~  'LostCr-OBS' ,
+    site == 'LostL' ~  'LostLk-OBS' ,
+    site == 'Oxbow' ~  'Oxbow-OBS' ,
+    site == 'Rose' ~  'Rose-OBS' ,
+    site == 'ROSE' ~  'Rose-OBS' ,
+    site == 'Slide' ~  'Slide-OBS' ,
+    site == 'Slide Lake' ~  'Slide-OBS' ,
+    site == 'WB CC' ~  'WB1-CC' ,
+    site == 'WB CX' ~  'WB1-CX' ,
+    site == 'WB1' ~  'WB1-OBS' ,
+    site == 'WB1CC' ~  'WB1-CC' ,
+    site == 'WB1CX' ~  'WB1-CX' ,
+    site == 'WB1DC' ~  'WB1-DC' ,
+    site == 'WB1DX' ~  'WB1-DX' ,
+    site == 'WB2' ~  'WB2-OBS' ,
+    site == 'WB3' ~  'WB3-OBS' ,
+    site == 'WB4' ~  'WB4-OBS' ,
+    site == 'Wb4' ~  'WB4-OBS' ,
+    site == 'WBCC' ~  'WB1-CC' ,
+    site == 'WBCX' ~  'WB1-CX' ,
+    site == 'WBDC' ~  'WB1-DC' ,
+    site == 'WBDX' ~  'WB1-DX' ,
+    site == 'XTAL' ~  'XTal1-OBS' ,
+    site == 'Xtal' ~  'XTal1-OBS' ,
+    site == 'xtal' ~  'XTal1-OBS' ,
+    site == 'Yancy' ~  'Yancy-OBS',
+    site == 'WBNA' ~ "FLAG-WBNA",
+    site == 'ElkNA' ~ 'FLAG-ElkNA',
+    site == 'EB1NA' ~ 'FLAG-EB1NA',
+    site == 'Tower' ~ 'Tower-OBS')
+)
+
+
+
+```
+
+A problem that emerges when looking at other files (e.g., 2015-2017 DKotter-era data, 2018 data) is the inconsistent use of case. Moving forward, all character strings in site names or the like will be converted to LOWER CASE. 
+
+```{r}
+## change case of ALL character strings to lower. 
+wt.nsf <- wt.nsf %>% 
+  mutate_if(.predicate = is.character,.funs=tolower)
+
+```
+
+### 2015-2017 Data
+
+Files were sourced from D. Kotter's Google Drive. These appear to be the 2015 to 2017 manual well data, although it's unclear what files are most complete because there are multiple files containing manual measurements. 
+
+**Source file uploaded on 20181022 to Google Team Drive:** https://drive.google.com/drive/u/1/folders/15F7-felMcqAWp1PCgU_Mukpf7LDvlpAM?ogsrc=32
+
+Two separate source files contain WT measurements. These are:
+
+1. WTmeasurements.xlsx -- This file has garbage dates for some dates (e.g., 5/?/2015), which prevent parsing on import and make the data unplotable/unanalyzable. After a copy of the raw file was made (WTmeasurements - raw.xlsx), the original file was modified by creating a new date column (date_guess) in which dates were manually corrected, or where to dates included a "?", a provisional date assigned. For example, all "5/?/2015" measurements were replaced with "5/15/2015" -- NEED TO CHECK THE ACTUAL FIELD SHEETS, IF THEY EXIST. Also note that there were ambiguous dates to present. For example, was 3/5/2015 March 5th or May 3rd? The excel file was not clear.
+
+2. WT_Measurement2.xlsx –- a second file with measurements. It’s not clear why there is this second file. A copy of the file (WT_Measurement2-raw.xlsx) was made before making the following edits: Records with "dry" in the DTW column had these moved to the "comment" field so the DTW would be all numeric. 
+
+Preliminary inspections of data reveal a variety of problems (e.g., site names are inconsistently enterered). The following code attempts to address these and prepare data for merging with DCC and 2018 data.    
+
+```{r}
+
+## read in the first sketchy file from DK
+
+w16_1 <- readxl::read_xlsx("data/raw/well_data_manual/WTmeasurements.xlsx") %>% 
+  janitor::clean_names()
+
+### purge the corrupted date column and replace with the "date_guess" column to allow binding of rows
+w16_1 <- w16_1 %>% 
+  select(-date) %>% 
+  rename(date = date_guess) %>% 
+  mutate(sourceFile = "WTmeasurements.xlsx")
+
+
+## read in the second sketchy file from DK
+w16_2 <- readxl::read_xlsx("data/raw/well_data_manual/WT_measurement2.xlsx") %>% 
+  janitor::clean_names() %>% 
+  mutate(td = as.numeric(td))%>% 
+  mutate(sourceFile = "WT_measurement2.xlsx")
+
+## combine
+w16c <- bind_rows(w16_1,w16_2) %>% 
+  distinct() # just distinct
+
+```
+
+
+
+```{r}
+
+# calculate relative water table elevation
+w16c <- w16c %>% 
+  mutate(rwte = (dtw-su)*-1)
+
+## add distinc year, doy fields. Remove extra character in the "well_id" field (needed for later combination)
+w16c <- w16c %>% 
+  mutate(yr = lubridate::year(date)) %>% 
+  mutate(doy = lubridate::yday(date)) 
+
+```
+
+>Some records lack a "well_id" value with a unique digit...
+
+```{r}
+## Records Not containing a digit in the 'well_id' column 
+
+w16c %>%
+  filter(!str_detect(well_id, "\\d")) %>% # filters all records NOT containing a digit
+  datatable(rownames = FALSE, caption = "Records with a 'well_id' field NOT containing a number as part of the id. Most are SG, the others crap, but some might be recoverable by consulting field books/forms.")
+
+w16c <- w16c %>%
+  filter(str_detect(well_id, "\\d")) %>% # filters all records containing a digit
+  mutate(wid = gsub("[^0-9.]", "", well_id)) # gsub to remove the character
+
+```
+
+
+```{r, eval=FALSE}
+###### create lookup
+# w16c %>%
+#   # select(-sourceFile) %>% 
+#   distinct(site) %>%
+#   writexl::write_xlsx("output/temp_to_delete/lookup_site2016.xlsx")
+
+w16c %>%
+  tabyl(site) %>% 
+  # distinct(site) %>% 
+  datatable(rownames = FALSE, caption = "Distinct 'site' values before cleaning")
+
+```
+
+#### Clean up
+>whitespace
+> Change case
+>misspelled  
+>missing
+
+```{r}
+#### CLEAN UP SITE NAMES
+w16c <- w16c %>%
+  filter(site != "22") %>% # there's a site called "22". Dropping it. 
+  filter(!is.na(site)) %>% # there's a site with "NA"for name. Dropping it.
+  mutate(site = stringr::str_trim(.$site, side = "both")) %>% ## trim off whitespace
+  mutate(site = case_when(
+    site == 'Crescent' ~  'Crescent-OBS' ,
+    site == 'Cressent' ~  'Crescent-OBS' ,
+    site == 'Crystal' ~  'XTal1-OBS' ,
+    site == 'EB1' ~  'EB1-OBS' ,
+    site == 'EB1 CC' ~  'EB1-CC' ,
+    site == 'EB1 CX' ~  'EB1-CX' ,
+    site == 'EB1 DC' ~  'EB1-DC' ,
+    site == 'EB1 DX' ~  'EB1-DX' ,
+    site == 'EB1CC' ~  'EB1-CC' ,
+    site == 'EB1CX' ~  'EB1-CX' ,
+    site == 'EB1DC' ~  'EB1-DC' ,
+    site == 'EB1DX' ~  'EB1-DX' ,
+    site == 'EB2' ~  'EB2-OBS' ,
+    site == 'EB2 CC' ~  'EB2-CC' ,
+    site == 'EB2 CX' ~  'EB2-CX' ,
+    site == 'EB2 DC' ~  'EB2-DC' ,
+    site == 'EB2 DX' ~  'EB2-DX' ,
+    site == 'EB2 obs' ~  'EB2-OBS' ,
+    site == 'EB2_Obs' ~  'EB2-OBS' ,
+    site == 'EB2CC' ~  'EB2-CC' ,
+    site == 'EB2CX' ~  'EB2-CX' ,
+    site == 'EB2DC' ~  'EB2-DC' ,
+    site == 'EB2DX' ~  'EB2-DX' ,
+    site == 'EB2OBS' ~  'EB2-OBS' ,
+    site == 'EBT1CC' ~  'EB1-CC' ,
+    site == 'EBT1CX' ~  'EB1-CX' ,
+    site == 'EBT1DC' ~  'EB1-DC' ,
+    site == 'EBT1DX' ~  'EB1-DX' ,
+    site == 'Elk 5' ~  'Elk5-OBS' ,
+    site == 'Elk1' ~  'Elk1-OBS' ,
+    site == 'ELK1' ~  'Elk1-OBS' ,
+    site == 'Elk2' ~  'Elk2-OBS' ,
+    site == 'ELK2' ~  'Elk2-OBS' ,
+    site == 'Elk3' ~  'Elk3-OBS' ,
+    site == 'ELK3' ~  'Elk3-OBS' ,
+    site == 'Elk4' ~  'Elk4-OBS' ,
+    site == 'ELK4' ~  'Elk4-OBS' ,
+    site == 'Elk5' ~  'Elk5-OBS' ,
+    site == 'ELK5' ~  'Elk5-OBS' ,
+    site == 'ElkCC' ~  'Elk1-CC' , #assuming all 'elk' are 'elk1'
+    site == 'ELKCC' ~  'Elk1-CC' ,
+    site == 'ElkCX' ~  'Elk1-CX' ,
+    site == 'ELKCX' ~  'Elk1-CX' ,
+    site == 'ElkDC' ~  'Elk1-DC' ,
+    site == 'ELKDC' ~  'Elk1-DC' ,
+    site == 'ElkDX' ~  'Elk1-DX' ,
+    site == 'ELKDX' ~  'Elk1-DX' ,
+    site == 'G hole' ~  'Ghole-OBS' ,
+    site == 'Ghole' ~  'Ghole-OBS' ,
+    site == 'GHOLE' ~  'Ghole-OBS' ,
+    site == 'Glen' ~  'Glen-OBS' ,
+    site == 'GLEN' ~  'Glen-OBS' ,
+    site == 'Hailbuff' ~  'Hailbuf-OBS' ,
+    site == 'HAILBUFF' ~  'Hailbuf-OBS' ,
+    site == 'Lava' ~  'Lava-OBS' ,
+    site == 'LAVA' ~  'Lava-OBS' ,
+    site == 'LB1' ~  'LB1-OBS' ,
+    site == 'LB2' ~  'LB2-OBS' ,
+    site == 'LB3' ~  'LB3-OBS' ,
+    site == 'LB4' ~  'LB4-OBS' ,
+    site == 'LB5' ~  'LB5-OBS' ,
+    site == 'Lost creek' ~  'LostCr-OBS' ,
+    site == 'Lost Creek' ~  'LostCr-OBS' ,
+    site == 'Lost Lake' ~  'LostLk-OBS' ,
+    site == 'Lost lake' ~  'LostLk-OBS' ,
+    site == 'LostC' ~  'LostCr-OBS' ,
+    site == 'LostL' ~  'LostLk-OBS' ,
+    site == 'Oxbow' ~  'Oxbow-OBS' ,
+    site == 'Rose' ~  'Rose-OBS' ,
+    site == 'ROSE' ~  'Rose-OBS' ,
+    site == 'Slide' ~  'Slide-OBS' ,
+    site == 'Slide Lake' ~  'Slide-OBS' ,
+    site == 'WB CC' ~  'WB1-CC' ,
+    site == 'WB CX' ~  'WB1-CX' ,
+    site == 'WB1' ~  'WB1-OBS' ,
+    site == 'WB1CC' ~  'WB1-CC' ,
+    site == 'WB1CX' ~  'WB1-CX' ,
+    site == 'WB1DC' ~  'WB1-DC' ,
+    site == 'WB1DX' ~  'WB1-DX' ,
+    site == 'WB2' ~  'WB2-OBS' ,
+    site == 'WB3' ~  'WB3-OBS' ,
+    site == 'WB4' ~  'WB4-OBS' ,
+    site == 'Wb4' ~  'WB4-OBS' ,
+    site == 'WBCC' ~  'WB1-CC' ,
+    site == 'WBCX' ~  'WB1-CX' ,
+    site == 'WBDC' ~  'WB1-DC' ,
+    site == 'WBDX' ~  'WB1-DX' ,
+    site == 'XTAL' ~  'XTal1-OBS' ,
+    site == 'Xtal' ~  'XTal1-OBS' ,
+    site == 'xtal' ~  'XTal1-OBS' ,
+    site == 'Yancy' ~  'Yancy-OBS',
+    site == 'WBNA' ~ "FLAG-WBNA",
+    site == 'ElkNA' ~ 'FLAG-ElkNA',
+    site == 'EB1NA' ~ 'FLAG-EB1NA',
+    site == 'Tower' ~ 'Tower-OBS')
+)
+
+## clarified with lewis that 'WB' = 'WB1', etc.
+
+
+w16c %>%
+  tabyl(site) %>% 
+  # distinct(site) %>% 
+  arrange(desc(n)) %>% 
+  datatable(rownames = FALSE, caption = "Distinct 'site' values after cleaning")
+
+## took us from 96 to 45 distinct'site'
+
+##### Create New Well ID that strips out the character part of well id -- just the numeric
+w16c <- w16c %>% 
+  mutate(fullID = paste0(site,"-",wid)) %>%  # there are duplicates for well_id and date combinations, so there must not be unique values for the different well_ids. 
+  mutate(date = as.Date(date))
+
+# still seem to have 4 NA
+# w16c %>% 
+#   filter(is.na(site)) %>% 
+#   dplyr::select(1:6) %>% 
+#   datatable(rownames = FALSE, caption = "The 4 records with 'NA' for 'site'. Dropped moving forward.")
+
+```
+
+
+```{r}
+# Change case to lower to facilate merging with other data
+w16c <- w16c %>% 
+  mutate_if(.predicate = is.character,.funs=tolower)
+
+```
+
+
+>Identify and eliminate records with 'NA' for 'site' 
+
+```{r}
+# eliminate records with missing values for 'site'
+w16c %>% 
+  filter(is.na(site)) %>% 
+  datatable(caption = "Records with 'NA' for 'site'")
+
+# Filter out records with missing values for 'site'
+w16c <- w16c %>% 
+  filter(!is.na(site))
+
+```
+
+>Identify and eliminate records with 'NA' for dtw
+
+```{r}
+
+w16c %>% 
+  filter(is.na(dtw)) %>% 
+  datatable(caption = "Records with 'NA' for 'dtw'")
+
+# Filter out records with missing values for 'dtw'
+w16c <- w16c %>% 
+  filter(!is.na(dtw))
+## will want to investigate issues behind NA 
+
+```
+
+>Identify and eliminate "dry" wells
+
+Many but not all of these were eliminated in the last step. This explicitly identifies and filters out the remaining wells notes as 'dry' in the comments section.   
+
+```{r}
+
+## Eliminate wells with "dry" comment
+# here are the dry wells
+w16c %>% 
+  filter(str_detect(comment, pattern = "dry") | str_detect(comment, pattern = "DRY")) %>%
+  select(site, date, dtw, comment) %>% 
+  datatable(rownames = FALSE, caption = "Records noted as 'dry' after eliminating records with 'NA' for wtd")
+
+## drop the NA. Explicitly dropping "dry" wells
+
+w16c <- w16c %>%
+  filter(!str_detect(comment, pattern = "dry") | is.na(comment)) %>% # note that need to also include the na or they get filtered out
+  filter(!str_detect(comment, pattern = "DRY") | is.na(comment))
+
+```
+
+```{r}
+# >Identify the records with distinct values in the "comments" field after eliminating the 'dry' wells 
+# Some of these are staff gages. A few may actaully be usable wells. But for now, they are getting dropped.
+
+# w16c %>% 
+#   distinct(comment) %>% 
+#   datatable(caption = "Distinct 'comment' entries.", rownames = FALSE)
+
+w16c %>% 
+  dplyr::select(fullID,site,well_id,su,dtw,comment,date) %>% 
+  filter(!is.na(comment)) %>% 
+  datatable(caption = "Distinct 'comment' entries after dropping 'dry' wells. Clearly there are some problems with records.", rownames = FALSE)
+
+w16c <- w16c %>%
+  filter(is.na(comment)) 
+
+# ### records to follow up with based on comments
+# w16c %>% 
+#   filter(str_detect(comment, pattern = "upst") | 
+#            str_detect(comment, pattern = "down"))
+
+```
+
+
+```{r}
+# Identify and eliminate remaining records with 'NA' for 'well_id'  
+w16c %>% 
+  filter(is.na(well_id)) %>% 
+  select(-c(tl,td,time, doy,sourceFile)) %>%
+  datatable(caption = "Records with NA for well_id")
+  # write_csv("output/temp_wells_with_noIDdatatable.csv")
+
+```
+
+```{r}
+# There might be a few SG to remove...
+w16c %>% 
+  filter(str_detect(well_id, "^S")) %>% 
+  datatable(rownames = FALSE, caption = "Records with a 'well_id' values starting with 'S'.")## note use of filter to remove records startng with 'S'. This has effect of pulling out some of the SG
+
+## eliminate these...
+w16c <- w16c %>% 
+  filter(!str_detect(well_id, "^S"))
+
+```
+
+```{r}
+## removing all NA
+## remove records with NA for well_id, rwte. Remove the tl and td columns (they are mostly NA and I don't know what they're for anyway) 
+w16c <- w16c %>% 
+  filter(!is.na(well_id)) %>%  # remove the record with no well id
+  select(-c(tl,td,time)) # select these mis columns
+
+```
+
+>Records with "NA" for "rwte": **For now, eliminating. These include SG as well as errors**
+
+```{r}
+## print out the is.na(rwte) records
+w16c %>% 
+  filter(is.na(rwte)) %>% 
+  datatable(caption = "Records with 'NA' for 'rwte' after previous filtering steps.")
+
+## filter out
+w16c <- w16c %>% 
+  filter(!is.na(rwte))  # remove records with no value for rwte
+
+```
+
+
+```{r}
+# This still leaves some SG. 
+# These will be filtered out.
+
+# w16c %>%
+#   filter(well_id == "SG") %>%
+#   datatable(rownames = FALSE, caption = "Remaining SG records.")
+
+## filter out remaining SG (if any)
+w16c <- w16c %>% 
+  filter(well_id != "SG")    # remove SG
+
+```
+
+
+>Records with "NA" for "wid": **For now, eliminating.**
+
+```{r}
+
+# there shouldn't be duplicates for the well_id_site combination
+# But there are...
+
+w16c %>% 
+  group_by(fullID, date) %>% 
+  mutate(ndistinct.site.date = n()) %>% 
+  # tally() %>% 
+  filter(ndistinct.site.date > 1) %>% 
+  select(wid, site, well_id, fullID, ndistinct.site.date, rwte, su, date) %>%
+  arrange(fullID,date) %>% 
+  # distinct() %>% 
+  # write_csv(path = "output/temp_to_delete/TEMP_well_id_qc.csv") %>% 
+  datatable(rownames = FALSE, caption = "Duplicate fullID/date combinations. There should only be one, right?")
+
+## I think this has to do with duplication between the two source files. Lets find distinct rows...
+w16c <- w16c %>%
+  select(wid, site, well_id, fullID, rwte, su, dtw, date) %>% 
+  distinct() 
+
+## this still leaves 14 duplicates
+w16c %>%
+  group_by(fullID, date) %>% 
+  mutate(ndistinct.site.date = n()) %>% 
+  # tally() %>% 
+  filter(ndistinct.site.date > 1) %>% 
+  arrange(fullID,date) %>% 
+  # write_csv("output/temp_to_delete/man_well_duplicate_date_fullID.csv")
+  datatable(rownames = FALSE, caption = "Duplicate records for fullID and date. The duplicates due to the two source files have already been removed, so these are something else that needs to be addressed.")
+
+## some issues can be fixed. For example, well_id "w of 36" is clearly not well 36. Others are more confusing.
+
+## for now, going to eliminate
+w16c <- w16c %>%
+  group_by(fullID, date) %>% 
+  mutate(ndistinct.site.date = n()) %>% 
+  # tally() %>% 
+  filter(ndistinct.site.date == 1) %>% 
+  ungroup()
+
+```
+
+##### more cleaning
+
+```{r}
+# ## duplicate date and well_id_site combinations with DIFFERENT rwte values
+# w16c %>%
+#   distinct() %>%
+#   group_by(well_id_site,date) %>%
+#   mutate(cnt.rec = n()) %>%
+#   filter(cnt.rec > 1) %>%
+#   arrange(well_id_site)
+
+## Some reminaing SG and crud to remove
+# w16c %>%
+#   # select(-sourceFile) %>% 
+#   # distinct() %>%
+#   group_by(well_id_site,date) %>% 
+#   mutate(cnt.rec = n()) %>%
+#   ungroup() %>% 
+#   filter(cnt.rec ==1) %>% 
+#   filter(str_detect(well_id, "^S")) 
+
+# if we want all values except those with digits, we could say:
+# mtcars %>% 
+#   filter(!str_detect(rowname, "\\d"))
+
+```
+
+>Examine counts by fullID
+
+```{r, eval=FALSE}
+### select just the key from 2015,2016,2017
+# w16c <- w16c %>% 
+#   mutate(flag = if_else(condition = is.na(site),true = "flag",false = "no")) %>% 
+#   arrange(desc(flag))
+
+# distinct
+# w16c %>% 
+#   tabyl(fullID) %>% 
+#   arrange(desc(n)) %>% 
+#   # distinct(well_id_site) %>% 
+#   ggplot(aes(n)) + 
+#   geom_histogram() +
+#   labs(title = "Histogram of n distinct well_id_site")
+
+w16c %>% 
+  group_by(fullID) %>% 
+  tally() %>% 
+  arrange(desc(n)) %>% 
+  DT::datatable(rownames = FALSE, caption = "Count of distinct across 2015, 2016, 2017")
+
+```
+
+```{r, keyPlottingPurrr, eval=FALSE}
+
+#### Plotting 15 16 17
+
+### nest
+w16c.nest <- w16c %>%
+  mutate(yr = lubridate::year(date)) %>%
+  mutate(doy = lubridate::yday(date)) %>%
+  group_by(site) %>% 
+  nest()
+
+
+## one approach to mapping ggplot
+w16c.nest <- w16c.nest %>% 
+  # names() %>% 
+  mutate(gg1 = map(data, ~ggplot(data = .x, aes(x = doy, y = rwte))
+                   + geom_point(aes(color = fullID)) +
+                     geom_line(aes(color = fullID)) +
+                     facet_wrap(~site)))
+
+# w16c.nest[[3]]
+# or using pluck. Here just the 25th plot of 
+# w16c.nest %>%
+#   pluck(3) %>%
+#   pluck(25)
+
+
+## a different approach to mapping ggplot
+w16c.nest <- w16c.nest %>% 
+  mutate(gg2 = map2(data, site, ~ggplot(data = .x) + theme_bw() +
+                    geom_point(aes(x = doy, y = rwte, color = fullID)) +
+                    geom_line(aes(x = doy, y = rwte, color = fullID)) +
+                    ggtitle(.y) +
+                    ylab("rwte") +
+                    theme_minimal() +
+                    facet_wrap(~yr, ncol=1, scale='free_y')))
+
+# w16c.nest %>% 
+#   mutate(nrow = map_int(.x = data, .f = nrow)) %>% 
+#   arrange(nrow) %>% 
+
+# show one plot
+w16c.nest %>% 
+  pluck(4) %>% 
+  pluck(3)
+
+######### Save to disc ########## 
+# use purrr::map2() to save all these plots at once inside your working directory:
+# file_names <- paste0(country_list, ".pdf")
+# map2(paste0(plots$country, ".pdf"), plots$plot, ggsave)
+# map2(paste0("WelMan",w16c.nest$site, ".pdf"), w16c.nest$plot, ggsave)
+
+# map2(paste0("WellMan_",w16c.nest$site, ".pdf"), w16c.nest$plot, ggsave, width = 8, height = 5.5)
+# map2(paste0("WellMan_",w16c.nest$site, ".png"), w16c.nest$gg2, ggsave, width = 8, height = 5.5)
+
+## the above is real nice. Saves a plot to file
+##########
+
+```
+
+```{r, eval=FALSE}
+##### Calendar Heatmap
+## prep for calendar heatmap 
+# See cTrap01.Rmd in the YellNSF_Rstudio folder
+
+library(lubridate)
+w16c <- w16c %>% 
+  mutate(wk = week(date)) %>%
+  mutate(yr = year(date)) %>% 
+  mutate(doy = yday(date)) %>% 
+  mutate(dow = lubridate::wday(date,label = TRUE)) %>%
+  mutate(wday = lubridate::wday(date,label = FALSE)) %>%
+  mutate(mday = mday(date)) %>%
+  mutate(mo = month(date)) %>% 
+  mutate(mweek = ceiling(mday / 7)) # week of month -- note use of ceiling
+
+```
+
+
+```{r, eval=FALSE}
+#### nesting purrr 
+
+##### split by site
+w16c.site.split <- w16c %>%  
+  group_by(yr, mo, dow, mweek, site) %>%
+  dplyr::mutate(n = n()) %>%
+  split(.$site)
+sitenames <- names(w16c.site.split) ### works. From orignal code. What about pull? or pluck?
+
+# For one sn [works!]
+ggplot(w16c.site.split[[6]], aes(mweek, dow, fill = n)) +
+  geom_tile(colour = "white") +
+  labs(x="Week of month", y = "Day of week") +
+  facet_grid(yr~mo)
+
+# For all sn [works!]
+hm.test <- map2(w16c.site.split, sitenames,
+  ~ ggplot(.x, aes(mweek, dow, fill = n)) +
+    geom_tile(colour = "white") +
+    labs(x="Week of month", y = "Day of week",title = .y, subtitle = "Count of observations by well-id-site") +
+    viridis::scale_fill_viridis() +
+    facet_grid(yr~mo))
+  
+###### idea -- list column > multiple plots > cowplot panel via pmap
+# examples maps:
+# panels a = dsm, plot b = dtm, plot c = tree
+# create separate plots for PROPERTIES
+
+```
+
+
+```{r, eval=FALSE}
+
+##### purrr + ggplot  
+# https://aosmith.rbind.io/2018/08/20/automating-exploratory-plots/
+
+#####
+## EXAMPLE
+#####
+
+# https://aosmith.rbind.io/2018/08/20/automating-exploratory-plots/
+
+#create some data
+set.seed(16)
+dat = data.frame(elev = round( runif(20, 100, 500), 1),
+                 resp = round( runif(20, 0, 10), 1),
+                 grad = round( runif(20, 0, 1), 2),
+                 slp = round( runif(20, 0, 35),1),
+                 lat = runif(20, 44.5, 45),
+                 long = runif(20, 122.5, 123.1),
+                 nt = rpois(20, lambda = 25) )
+head(dat)
+
+# create 2 vectors to loop over
+response = names(dat)[1:3]
+expl = names(dat)[4:7]
+
+# When looping through character vectors, good to use named vectors...
+# helps me keep track of things in the output.
+# 
+# The set_names() function in purrr is super handy for naming character vectors, since it can use the values of the vector as names (i.e., the vector will be named by itself). (I don’t recommend trying this with lists of data.frames like I have in the past, though, since it turns out that naming a data.frame with a data.frame isn’t so useful. )
+
+
+
+```
+
+### combine DCC (2001-2014), 2015-2017, and 2018
+
+
+```{r}
+#### clean the DCC for merge
+# nsfclean
+
+#### WORK ON THIS SECTION. playing fast and loose with the cleaning....
+wt.nsf <- wt.nsf %>% 
+  filter(!is.na(rellevel)) %>% 
+  filter(rellevel != 777) %>% # there are codes of 777, 888, and 999. Need to find metadata and decode
+  filter(rellevel != 888) %>%
+  filter(rellevel != 999) %>%
+  mutate(rellevel = rellevel * 100)  ###### assumes were in m, mult by 100 for cm
+
+```
+
+
+```{r}
+# still some cleaning issues. 
+
+## add fullID
+wt.nsf <- wt.nsf %>%
+  rename(date = date) %>% 
+  mutate(fullid = paste0(site,"-",wat_id)) 
+
+# wt.nsf %>% 
+#   distinct(fullid) %>% 
+#   arrange(fullid) %>% 
+#   datatable()
+
+##### clean up
+# Some rows have no wat_id. Dump
+wt.nsf <- wt.nsf %>% 
+  filter(!is.na(wat_id))
+
+```
+
+
+
+```{r}
+#### join
+well.coord <- wt.nsf %>% 
+  dplyr::select(fullid, x,y,z) %>% 
+  distinct() # looks fu
+
+sel.nsf <- wt.nsf %>% 
+  dplyr::select(site,fullid,date,rellevel)
+
+sel.16 <- w16c %>% 
+  dplyr::rename(fullid = fullID) %>% 
+  dplyr::select(site,fullid, date, rwte) %>% 
+  mutate(rellevel = rwte/100) %>% 
+  dplyr::select(-rwte)
+
+sel.01.17 <- bind_rows(sel.16,sel.nsf)
+
+```
+
+```{r}
+# Need to clear units
+sel.01.17 <- sel.01.17 %>% 
+  mutate(rellevel = rellevel*10) 
+```
+
+
+```{r}
+
+## parse the date
+sel.01.17 <- sel.01.17 %>% 
+  mutate(wk = lubridate::week(date)) %>%
+  mutate(yr = lubridate::year(date)) %>% 
+  mutate(doy = lubridate::yday(date)) %>% 
+  mutate(dow = lubridate::wday(date,label = TRUE)) %>%
+  mutate(wday = lubridate::wday(date,label = FALSE)) %>%
+  mutate(mday = lubridate::mday(date)) %>%
+  mutate(mo = lubridate::month(date)) %>% 
+  mutate(mweek = ceiling(mday / 7)) # week of month -- note use of ceiling!
+
+## break out the type
+sel.01.17 <- sel.01.17 %>% 
+  separate(col = site,into = c("siteGeneral", "plotType"),sep = "-", remove = FALSE)
+
+## some filtering...
+sel.01.17 <- sel.01.17 %>% 
+  filter(yr != 1900) %>% 
+  filter(!is.na(site)) 
+
+```
+
+```{r, eval=TRUE}
+
+#### add another id column, ignoring the plot type...
+
+## filter out bogus site names 
+sel.01.17 <- sel.01.17 %>% 
+  separate(fullid,into = c('MG','XPT','num'),sep = "-",remove = FALSE) %>%
+  filter(!str_detect(XPT, "NA$")) %>% 
+  unite(.,MG,num,col = "fullIDalt",sep = "-") ## unite
+
+## remedy some sign issues with the rellevel
+sel.01.17 <- sel.01.17 %>% 
+  mutate(rdtw = abs(rellevel)*-1) %>% 
+  filter(rdtw > -200) # may have scale and sign issues. Starting with the sign. Some outliers
+
+```
+
+
+```{r, eval=FALSE}
+
+#### colored tables -- cant seem to get to work again.
+# See: https://cran.r-project.org/web/packages/formattable/vignettes/formattable-data-frame.html
+
+ddf <- sel.01.17 %>% 
+  tabyl(fullid,yr) 
+
+ddf %>% 
+  gt()
+
+# ncol(ddf)
+ddf %>%
+  formattable::formattable(.,list(area(col = 2:17) ~ color_tile("transparent","pink")))
+
+ddf %>%
+  formattable::formattable(ddf,list((col = 2:16) ~ color_tile("lightyellow","orange")))
+
+# set.seed(123)
+# library(formattable)
+# df <- data.frame(id = 1:10, 
+#   a = rnorm(10), b = rnorm(10), c = rnorm(10))
+# formattable(df, list(area(col = a:c) ~ color_tile("transparent", "pink")))  
+  
+
+```
+
+```{r, eval=FALSE}
+sel.01.17 %>% 
+  group_by(fullIDalt,yr) %>% 
+  summarise(n = n())
+
+
+### here are some porblems...
+#sel.01.17 %>% distinct(fullID) ## 579
+#sel.01.17 %>% distinct(fullIDalt) ## 392
+
+```
+
+
+
+### Plotting 2001 to 2017
+
+```{r, eval=FALSE}
+library(naniar) # load the functions in this library
+gg_miss_var(sel.01.17)
+
+```
+
+
+> Heat maps of counts
+
+```{r}
+
+## some heatmaps of counts of records
+hmap.cnt1 <- sel.01.17 %>%
+  group_by(site, fullid, mo, yr) %>% 
+  tally() %>% 
+  filter(mo != 1 & mo !=4) %>% 
+  ggplot(aes(yr,fullid)) +
+  geom_tile(aes(fill = n), col='white') +
+  scale_fill_viridis() + 
+  theme_bw() +
+  theme(text = element_text(size=8)) +
+  # facet_wrap(~mo, ncol = 6) +
+  facet_grid(site~mo)
+hmap.cnt1  
+
+# ggsave(filename = "output/countobs_large_format.pdf", width = 18, height = 42)
+
+hmap.cnt2 <- sel.01.17 %>%
+  group_by(plotType, mo, yr) %>% 
+  tally() %>% 
+  filter(mo != 1 & mo !=4) %>% 
+  ggplot(aes(yr,plotType)) +
+  geom_tile(aes(fill = n), col='white') +
+  scale_fill_viridis(option = 'A') + 
+  theme_bw() +
+  # theme(text = element_text(size=10)) +
+  facet_wrap(~mo, ncol = 1) +
+  labs(title = "")
+hmap.cnt2
+# ggsave(filename = "output/countobs_fullIDalt_large_format.pdf", width = 18, height = 42)
+
+
+
+# cowplot::plot_grid(hmap.cnt1,hmap.cnt2)
+# ggsave(filename = "output/countobs_fullIDalt_large_format_34_42.pdf", width = 34, height = 42)
+
+
+hmap.cnt3 <- sel.01.17 %>%
+  group_by(doy, mo, yr, plotType) %>% 
+  tally() %>% 
+  filter(mo != 1 & mo !=4 & mo !=10) %>% 
+  ggplot(aes(doy,n)) +
+  geom_tile(aes(fill = n), col='white') +
+  scale_fill_viridis(option = 'A') + 
+  theme_bw() +
+  theme(text = element_text(size=8)) +
+  facet_wrap(~mo, ncol = 1, scales = "free") +
+  labs(title = "fullIDalt")
+
+
+```
+
+#### Relevative water table (cm)
+
+
+
+```{r}
+
+hmap.cnt4 <- sel.01.17 %>%
+  group_by(site, mo, yr, plotType) %>% 
+  filter(mo != 1 & mo !=4 & mo !=10) %>% 
+  summarize(mean.rellevel = mean(rellevel,na.rm = TRUE)) %>% 
+  ggplot(aes(mo,plotType)) +
+  geom_tile(aes(fill = mean.rellevel), col='white') +
+  scale_fill_viridis(option = 'A') + 
+  theme_bw() +
+  theme(text = element_text(size=8)) +
+  facet_wrap(~mo, ncol = 1, scales = "free") +
+  labs(title = "fullIDalt")
+
+```
+
+```{r, eval=FALSE}
+
+## boxplot
+sel.01.17 %>% 
+  filter(mo != 1 & mo != 5 & mo != 10) %>% 
+  filter(XPT != "OBS") %>% 
+  ggplot(aes(mo,rdtw)) +
+  geom_boxplot(aes(fill = XPT)) +
+  facet_grid(siteGeneral~yr,scales = "free") +
+  labs(title = "Relative water table depth (cm)") +
+  theme_bw()
+
+```
+
+> Ridgelplots of relative water depth across years. 
+
+```{r, fig.height=10, fig.width=8}
+
+sel.01.17 %>% 
+  filter(mo != 1 & mo != 5 & mo != 10) %>% 
+  filter(XPT != "OBS") %>%
+  ggplot(aes(rdtw,reorder(XPT,rdtw))) +
+  # geom_density(aes(color = XPT)) +
+  ggridges::geom_density_ridges_gradient(aes(fill=XPT),color = "white", scale = 3, rel_min_height = 0.01, gradient_lwd = 1.) +
+  scale_x_continuous(limits = c(-250, 1)) +
+  # scale_y_discrete(expand = c(0.01, 0)) +
+  scale_fill_viridis(name = "",discrete = TRUE) +
+  scale_color_manual("white") +
+  labs(x = "Relative water table depth (cm)",
+    title = 'Relative water table depth', 
+    subtitle = "All years and wells combined",
+    y="") +
+  geom_vline(xintercept = 0, color='red',lty = "dashed", size=2) +
+  theme_bw() +
+  facet_grid(siteGeneral~mo, scales = "free") +
+  coord_flip()  # +
+  # ggridges::theme_ridges(font_size = 13, grid = TRUE) + theme(axis.title.y = element_blank())
+
+
+# sel.01.17 %>%
+#   group_by(siteGeneral,XPT,mo) %>%
+#   summarise(mean.rdtw = mean(rdtw, na.rm = TRUE), sd.rdtw = sd(rdtw, na.rm = TRUE)) %>% 
+#   ggplot(aes(XPT,mean.rdtw)) +
+#   geom_point()
+
+
+
+
+```
+
+
+
+```{r, eval=FALSE}
+## hm doy
+
+sel.01.17 %>%
+  filter(mo != 1 & mo !=4) %>% 
+  group_by(fullIDalt, yr) %>% 
+  tally() %>%
+  arrange(desc(n))
+
+sel.01.17 <- sel.01.17 %>% 
+  mutate(yr = as.factor(yr))
+
+AA1 <- sel.01.17 %>%
+  filter(mo != 1 & mo !=4) %>% 
+  group_by(fullIDalt, yr) %>% 
+  tally() %>%
+  arrange(desc(n)) %>% 
+  ggplot(aes(yr,fullIDalt)) +
+  geom_tile(aes(fill = n), col='white') +
+  scale_fill_viridis(option = 'A') + 
+  theme_bw() +
+  theme(text = element_text(size=8)) +
+  # facet_wrap(~mo, ncol = 6) +
+  # facet_grid(fullIDalt~mo) +
+  labs(title = "fullIDalt",subtitle = "note use of fullIDalt column instead of fullID")
+
+AA2 <- sel.01.17 %>%
+  filter(mo != 1 & mo !=4) %>% 
+  group_by(fullID, yr) %>% 
+  tally() %>%
+  arrange(desc(n)) %>% 
+  ggplot(aes(yr,fullID)) +
+  geom_tile(aes(fill = n), col='white') +
+  scale_fill_viridis() + 
+  theme_bw() +
+  theme(text = element_text(size=8)) +
+  # geom_text(aes(label=n),size=1.5, color='ivory') +
+  # facet_wrap(~mo, ncol = 6) +
+  # facet_grid(fullIDalt~mo) +
+  labs(title = "fullID", subtitle = "note use of fullID column instead of fullIDalt")
+
+# ggsave(filename = "output/countobs_fullIDalt_large_format.pdf", width = 18, height = 42)
+
+
+cplo <- cowplot::plot_grid(AA1,AA2)
+# ggsave(cplo,filename = "output/countobs_fullIDalt_large_format_16_42.pdf", width = 16, height = 42)
+
+
+```
+
+
+>Count of observations across years  
+
+
+```{r}
+
+sel.01.17 %>%
+  filter(mo != 1 & mo !=4) %>% 
+  group_by(plotType, yr) %>% 
+  tally() %>%
+  arrange(desc(n)) %>% 
+  # mutate(yr = as.integer(yr)) %>% 
+  ggplot(aes(yr, plotType)) +
+  geom_tile(aes(fill=n), color = "white") +
+  scale_fill_viridis() +
+  geom_text(aes(label = n), color = "ivory") +
+  labs(x= "Year", y = "Plot type", title = "Count of observations", subtitle = "Combined 2001-2017 data") +
+  theme_minimal()
+
+
+# sel.01.17 %>%
+#   filter(mo != 1 & mo !=4) %>% 
+#   group_by(plotType,site, yr) %>% 
+#   tally() %>%
+#   arrange(desc(n)) 
+
+# sel.01.17 %>%
+#   filter(mo != 1 & mo !=4) %>% 
+#   group_by(plotType,site, yr) %>% 
+#   tally() %>%
+#   arrange(desc(n))
+
+
+```
+
+>**What's up with 2007?**
+
+>faceting by year: count of observations
+
+```{r, fig.height=8,fig.width=8}
+
+# sel.01.17 %>%
+#   filter(mo != 1 & mo !=4) %>% 
+#   group_by(siteGeneral, plotType, yr) %>% 
+#   tally() %>%
+#   arrange(desc(n)) %>% 
+#   # mutate(yr = as.integer(yr)) %>% 
+#   ggplot(aes(yr, plotType)) +
+#   geom_tile(aes(fill=n), color = "white") +
+#   scale_fill_viridis() +
+#   geom_text(aes(label = n), color = "ivory") +
+#   labs(x= "Year", y = "Plot type", title = "Count of observations", subtitle = "Combined 2001-2017 data") +
+#   facet_wrap(~siteGeneral, ncol=2)
+
+# ggsave(filename = "output/temp_to_delete/count_measurements.png", width = 14, height = 20, dpi = 300)
+# sel.01.17 %>%
+#   group_by(well)
+#   ggplot(aes())
+
+# exclude the obs
+
+sel.01.17 %>%
+  filter(plotType != "OBS") %>% 
+  filter(mo != 1 & mo !=4) %>% 
+  group_by(siteGeneral, plotType, yr) %>% 
+  tally() %>%
+  arrange(desc(n)) %>% 
+  # mutate(yr = as.integer(yr)) %>% 
+  ggplot(aes(yr, plotType)) +
+  geom_tile(aes(fill=n), color = "white") +
+  scale_fill_viridis() +
+  geom_text(aes(label = n), color = "ivory") +
+  labs(x= "Year", y = "Plot type", title = "Count of observations", subtitle = "Combined 2001-2017 data") +
+  facet_wrap(~siteGeneral, ncol=1) +
+  theme_minimal()
+
+
+```
+
+
+```{r}
+sel.01.17 %>%
+  filter(plotType != "OBS") %>% 
+  filter(mo != 1 & mo !=4) %>% 
+  group_by(siteGeneral, mo, plotType, yr) %>% 
+  tally() %>%
+  arrange(desc(n)) %>% 
+  # mutate(yr = as.integer(yr)) %>% 
+  ggplot(aes(mo, yr)) +
+  geom_tile(aes(fill=n), color = "white") +
+  scale_fill_viridis(option = "A") +
+  # geom_text(aes(label = n), color = "ivory") +
+  labs(x= "Month", y = "Year", title = "Count of observations", subtitle = "Combined 2001-2017 data") +
+  facet_wrap(~siteGeneral, ncol=2) +
+  theme_minimal()
+
+
+```
+
+
+```{r, eval=FALSE}
+sel.01.17 %>%
+  filter(plotType != "OBS") %>% 
+  filter(mo != 1 & mo !=4) %>% 
+  group_by(siteGeneral, plotType, yr) %>% 
+  summarize(mean.rtwe = mean(rtwe, na.rm=TRUE)) %>%
+  arrange(desc(mean.rtwe)) %>% 
+  # mutate(yr = as.integer(yr)) %>% 
+  ggplot(aes(yr, plotType)) +
+  geom_tile(aes(fill=mean.rtwe), color = "white") +
+  scale_fill_viridis() +
+  geom_text(aes(label = n), color = "ivory") +
+  labs(x= "Year", y = "Plot type", title = "Count of observations", subtitle = "Combined 2001-2017 data") +
+  facet_wrap(~siteGeneral, ncol=1)
+
+```
+
+
+
+#### Nested approach
+
+Nested dataframes and listcolumns 
+```{r, keyPlottingPurrr2, fig.height=15, fig.width=8}
+
+### nest
+sel.01.17.nest <- sel.01.17 %>%
+  group_by(site) %>%
+  mutate(cnt.in.gp = n()) %>% 
+  # filter(cnt.in.gp > 1) # 
+  nest()
+
+## one approach to mapping ggplot
+# sel.01.17.nest <- sel.01.17.nest %>% 
+#   # names() %>% 
+#   mutate(gg1 = map(data, ~ggplot(data = .x, aes(x = doy, y = rellevel) +)
+#                    + geom_point(aes(color = fullID)) +
+#                      geom_line(aes(color = fullID)) +
+#                      facet_wrap(~site)))
+# sel.01.17.nest[[3]]
+# # using pluck. Here just the 25th plot of 
+# sel.01.17.nest %>%
+#   pluck(3) %>%
+#   pluck(1)
+
+
+## fullIDalt ggplot
+sel.01.17.nest <- sel.01.17.nest %>% 
+  mutate(gg2 = map2(data, site, ~ggplot(data = .x) + theme_bw() +
+                    geom_point(aes(x = doy, y = rellevel, color = fullIDalt)) +
+                    geom_line(aes(x = doy, y = rellevel, color = fullIDalt)) +
+                    ggtitle(.y) +
+                    ylab("rwte") +
+                    geom_hline(aes(yintercept = 0),color="red") +
+                    facet_wrap(~yr, ncol=1, scale='free_y')))
+
+sel.01.17.nest <- sel.01.17.nest %>% 
+  mutate(gg3 = map2(data, site, ~ggplot(data = .x) + theme_bw() +
+                    geom_point(aes(x = doy, y = rellevel, color = yr)) +
+                    geom_line(aes(x = doy, y = rellevel, color = yr)) +
+                    ggtitle(.y) +
+                    ylab("rwte") +
+                    facet_wrap(~fullIDalt, ncol=1, scale='free_y')))
+
+
+# sel.01.17.nest <- sel.01.17.nest %>% 
+#   mutate(gg4 = map2(gg2, gg3, .f = cowplot::plot_grid)) 
+
+## a job for safely?
+```
+
+```{r, eval=FALSE}
+
+# show one plot
+sel.01.17.nest %>%
+  pluck(3) %>%
+  pluck(5)
+# show another plot
+sel.01.17.nest %>%
+  pluck(3) %>%
+  pluck(6)
+# show another plot
+sel.01.17.nest %>%
+  pluck(3) %>%
+  pluck(7)
+
+```
+
+
+
+```{r, eval=FALSE}
+### plot them all...
+sel.01.17.nest %>%
+  pluck(3)
+
+```
+
+
+
+*Single points indicate that only a single measurement was made that season. Suggest more well data should be out there from DK.   
+*There are are only a few observations. Only 2 or 3 in a summer is still low. 
+
+```{r, eval=FALSE}
+######### Save to disc ########## 
+# use purrr::map2() to save all these plots at once inside your working directory:
+# file_names <- paste0(country_list, ".pdf")
+# map2(paste0(plots$country, ".pdf"), plots$plot, ggsave)
+# map2(paste0("WelMan",w16c.nest$site, ".pdf"), w16c.nest$plot, ggsave)
+
+# map2(paste0("WellMan_",w16c.nest$site, ".pdf"), w16c.nest$plot, ggsave, width = 8, height = 5.5)
+
+## create pdf plot 
+# map2(paste0("WellMan_",sel.01.17.nest$site, ".pdf"), sel.01.17.nest$gg4, ggsave, width = 8, height = 5.5)
+
+## the above is useful. Saves a plot to file
+
+```
+
+### Maps
+
+```{r}
+## mapview
+well.coord.sf <- well.coord %>% 
+  filter(x != 999) %>% 
+  sf::st_as_sf(coords = c("x", "y"), crs = 26912)
+
+# plot(well.coord.sf)
+
+## you'll want to figure why it's 999 in the data...
+# well.coord %>% 
+#   filter(x == 999)
+# # 8 records...
+```
+
+```{r}
+# well.coord.sf
+## join the well data to sf coord
+sel.01.17.sf <- dplyr::left_join(well.coord.sf,sel.01.17,by="fullid")
+
+# sel.01.17 %>% View()
+```
+
+#### Well elevation (m ASL)
+
+```{r, eval=TRUE}
+# elevation map
+mapviewOptions(basemaps = c("Esri.WorldShadedRelief", "Esri.WorldImagery"),
+               raster.palette = grey.colors,
+               vector.palette = colorRampPalette(c("snow", "cornflowerblue", "grey10")),
+               na.color = "magenta",
+               layers.control.pos = "topright")
+
+mapview::mapview(well.coord.sf, zcol = "z", legend = TRUE)
+
+```
+
+#### Minimum July relative WTD
+
+```{r}
+
+mapviewOptions(basemaps = c("Esri.WorldImagery", "Esri.WorldShadedRelief"),
+               raster.palette = grey.colors,
+               vector.palette = colorRampPalette(c("snow", "cornflowerblue", "grey10")),
+               na.color = "magenta",
+               layers.control.pos = "topright")
+
+minJulyRelElev.sf <- sel.01.17.sf %>%
+  group_by(fullid, mo) %>% 
+  filter(mo == 7) %>% 
+  summarise(min.rlevel = min(rellevel,na.rm = TRUE)) 
+
+mapview(minJulyRelElev.sf, zcol = "min.rlevel",legend= TRUE)
+
+```
+
+#### Minimum August relative WTD
+
+```{r}
+mapviewOptions(basemaps = c("Esri.WorldImagery", "Esri.WorldShadedRelief"),
+               raster.palette = grey.colors,
+               vector.palette = colorRampPalette(c("snow", "cornflowerblue", "grey10")),
+               na.color = "magenta",
+               layers.control.pos = "topright")
+
+minAugRelElev.sf <- sel.01.17.sf %>%
+  group_by(fullid, mo) %>% 
+  filter(mo == 8) %>% 
+  summarise(min.rlevel = min(rellevel,na.rm = TRUE)) 
+
+mapview(minAugRelElev.sf, zcol = "min.rlevel",legend= TRUE)
+
+
+
+```
+
+```{r, eval=FALSE}
+## write kml
+sel.01.17.sf %>%
+  group_by(fullid, mo) %>% 
+  filter(mo == 8) %>% 
+  summarise(min.rlevel = min(rellevel,na.rm = TRUE)) %>% 
+  sf::st_write(dsn = "output/AugMin.kml")
+
+```
+
+
+
+```{r, eval=FALSE}
+# DO this
+
+# https://r-spatial.github.io/mapview/articles/articles/mapview_04-popups.html#graph-popups
+
+library(lattice)
+library(sp)
+
+data(meuse)
+coordinates(meuse) <- ~x+y
+proj4string(meuse) <- CRS("+init=epsg:28992")
+
+p <- xyplot(copper ~ cadmium, data = meuse@data, col = "grey", pch = 20, cex = 2)
+p <- mget(rep("p", length(meuse)))
+
+clr <- rep("grey", length(meuse))
+p <- lapply(1:length(p), function(i) {
+  clr[i] <- "red"
+  update(p[[i]], col = clr)
+})
+
+
+mapview(meuse,
+        zcol = "cadmium",
+        popup = popupGraph(p))
+
+
+```
+
+
+
+### 2018 Data  
+
+Import the 2018 data. These data were entered by LM and crew on on the shared Google team drive: 
+https://drive.google.com/drive/u/1/folders/1kXzGX4OFxx5JqLi_xsXMTN6UuDe0rISp?ogsrc=32 
+
+
+
+```{r}
+w18 <- readxl::read_xlsx("data/raw/well_data_manual/2018_Raw_WTD.xlsx") %>% 
+  janitor::clean_names() %>% 
+  mutate(date = anytime::anydate(date)) %>% # make date column date format
+  mutate(site = stringr::str_trim(.$site, side = "both")) ## trim off whitespace
+
+
+w18 %>% 
+  distinct(date) %>% 
+  gt::gt() %>% 
+  tab_header(title = "Distinct measurement dates")
+# Cleaning names can introduce problems, but enforcing the consistency up front can help prevent a host of others.
+
+```
+
+```{r}
+## missingness plot
+visdat::vis_dat(w18) +
+  labs(title = "Missing data: 2018 Manual Well Measurements")
+
+
+# There is some work to be done to unpack this...
+
+```
+
+There is a complicated field naming convention at work in the orignal spreadsheet. The focus here is on just getting to the WT data, but will want to come back and interogate these other fields more. 
+
+```{r}
+# w18 %>% 
+#   names()
+## type convert
+w18 <- w18 %>% 
+  mutate(su_cm  = as.numeric(su_cm)) %>%
+  mutate(dtw_cm = as.numeric(dtw_cm))
+
+w18 %>% 
+  distinct(site) %>% 
+  arrange(site) %>% 
+  gt::gt()
+
+### Enforce consistency in site names
+
+# %>% distinct(site) %>% 
+#   arrange(site) %>% 
+#   View()
+
+w18.sel <- w18 %>%   
+  mutate(rwte = (dtw_cm - su_cm)*-1) %>%
+  rename(su = su_cm) %>% 
+  rename(dtw = dtw_cm) %>% 
+  mutate(yr = lubridate::year(date)) %>%
+  mutate(doy = lubridate::yday(date)) %>%
+  # View()
+  mutate(well_id_site = paste0(site,"-",id)) %>%  # there are duplicates for well_id and date combinations, so there must not be unique values for the different well_ids. 
+  filter(well_1_sg_0 == 1) %>% 
+  select(site, su, dtw, date, rwte, yr, doy, well_id_site)
+
+## select a subset of columns in common with past data to enable rowbind
+
+```
+
+#### Combine Years and Clean  
+
+Some issues that will need to be addressed:  
+1. What constitues a well ID is not consistent. Does it include site or experimental treatment?
+2. Formatting of identifiers between files not consistent
+
+The 2018 data uses yet aother set of conventions for identifiers...  
+
+Site names are lower case, they _sometimes_ have numeric idenifiers with sites and sometimes don't (e.g., elk1 vs. elk) 
+
+```{r}
+w18.sel %>% 
+  distinct(site) %>% 
+  arrange(site) %>% 
+  datatable(rownames = FALSE, caption = "Distinct values for 'site' column in imported 2018 xlsx data.")
+
+# see issue of "soda butte and soda butte"
+# see issue of "wb"
+
+```
+
+
+# name comp
+```{r}
+
+w18.sel %>% 
+  glimpse()
+
+## FIX hailbuf and Hailbuf
+
+## rename 'site' to 'siteGeneral' to match
+# what I think is in sel.01.17
+name.18 <- w18.sel %>% 
+  rename(siteGeneral=site) %>% 
+  distinct(siteGeneral) %>% 
+  arrange(siteGeneral) 
+
+name.18 %>% 
+  gt() %>% 
+  tab_header(title = "W18 Unique siteGeneral")
+
+name.sel.01.17 <- sel.01.17 %>% 
+  distinct(siteGeneral) %>% 
+  arrange(siteGeneral) %>% 
+  gt()
+
+name.sel.01.17 %>% 
+  gt() %>% 
+  tab_header(title = "sel.01.17 Unique siteGeneral")
+## no crystal  
+## no 'elk', only 'elk1' through 'elk5'
+
+
+
+
+```
+
+# work with DC
+```{r}
+sel.01.17 %>% 
+  # names() %>% 
+  tabyl(fullid, date) %>% 
+  DT::datatable()
+
+```
+
+
+```{r, eval=FALSE}
+
+# ditch XPT, duplicates info in plotType
+sel.01.17 %>% 
+  count(plotType)
+
+sel.01.17 %>% 
+  count(XPT)
+
+####
+sel.01.17 <- sel.01.17 %>%
+  select(-(XPT))
+
+# write_csv(sel.01.17, "./data/processed/water_table_2001_2017.csv")
+
+w18.sel %>% 
+  select()
+
+w18.sel %>%
+  # names()
+  separate(well_id_site,into = c('MG','num'),sep = "-",remove = FALSE) %>%
+  filter(!str_detect(XPT, "NA$")) %>% 
+  unite(.,MG,num,col = "fullIDalt",sep = "-") 
+
+# bind rows...after you get the names consistently formatted
+w15.18 <- bind_rows(w18.sel,w16c)
+
+```
+
+
+```{r, eval=FALSE}
+
+## filter out records with bogus dates. These should be investigated further  
+wt.nsf %>% 
+  clean_names() %>% 
+  filter(year > 1900) %>% # filter out records with bunk dates 
+  arrange(desc(date))
+
+```
+
+
+```{r, eval=FALSE}
+## use list columns to great ggplot objects then save as pdf
+## example: https://stackoverflow.com/questions/52265591/how-to-print-a-list-column-of-ggplots-to-pdf
+## Plot data for exploratory analysis  
+library(tidyverse)
+mydata <- data_frame(group = c('a', 'a', 'a', 'b', 'b', 'b'),
+                     x = c(1,2,3,5,6,7),
+                     y = c(3,5,6,4,3,2))
+
+mydata2 <- mydata %>% group_by(group) %>% 
+  nest() %>% 
+  mutate(myplot = map(data, ~ggplot(data = .x, aes(x = x, y = x)) + geom_point()))
+
+pdf()
+print(mydata2$myplot)
+dev.off()
+
+```
+
+

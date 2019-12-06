@@ -1,0 +1,294 @@
+---
+title: "Willow Utilization - Data Processing Report"
+output:
+  html_document: 
+    theme: journal
+    toc: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+# knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'center')
+# opts_knit$set(root.dir=normalizePath('../')) # this is required if Rmd is nested below the project directory
+
+# opts_chunk$set(fig.path = "../output/figures/") # corrected path and added dev. Needed to specify a subdirectory for figs
+
+```
+
+**Updated:** `r format(Sys.time(), '%d %B, %Y')`
+
+# Introduction  
+
+This document evaluates willow utilization measurement data from project inception through 2019. Data include those archived on the "Digital Collections of Colorado" (DCC) library site and more recent (2015-2019) data. These analyses are aimed at identifying potential issues such as:
+
+* Inconsistently named/typed factors    
+* Missing values
+* Data values outside of expected range or showing unusual patterns
+
+Data are cleaned to produce files for further analyses. 
+
+
+
+```{r,echo=FALSE}
+# library(here)
+# here()
+# install.packages("bindrcpp")
+suppressPackageStartupMessages(library(tidyverse))
+library(fs)
+suppressPackageStartupMessages(library(sf))
+# library(raster)
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(readxl))
+# library(glue)
+suppressPackageStartupMessages(library(mapview))
+# library(ggmap)
+# library(ggrepel)
+suppressPackageStartupMessages(library(viridis))
+library(ggExtra)
+library(DT)
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(lubridate))
+library(anytime)
+suppressPackageStartupMessages(library(compare))
+suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(dataMaid))
+
+```
+
+## Data import and inspection 
+
+### Willow Measurements
+#### 2003 - 2015 Shoot level spring current annual growth (DCC) 
+
+Data imorted from excel file downloaded from team google drive: [add URL].
+Field "Record Id" has been added to help indexing rows for QA/QC purposes. It's a sequential index of rows. 
+
+#### 2016-2018 Shoot level spring current annual growth
+
+#### 2003 - 2015 Shoot level fall current annual growth (DCC) 
+
+Data imorted from excel file downloaded from team google drive: [add URL].
+Field "Record Id" has been added to help indexing rows for QA/QC purposes. It's a sequential index of rows. 
+
+#### 2016-2018 Shoot level fall current annual growth
+
+**2016 data**  
+
+**2017 data** 
+
+
+```{r, message=FALSE, warning=FALSE}
+## Data downloaded 20180404 from Raw production gdrive.
+# working. Em still entering and QC work still in progress 
+
+# data entered as of April 2018
+# u17.raw <- readxl::read_xlsx("data/raw/utilization/2017_Raw_Utilization_20180421.xlsx")
+
+# data current in team Drive  as of December 2018
+u17.raw <- readxl::read_xlsx("data/raw/utilization/2017_Raw_Utilization_20181218.xlsx")
+
+# names(p17.raw)
+
+# there are problems with how the fields are named in the csv.
+# use the "clean_names" func in janitor to fix...
+u17 <- u17.raw %>% 
+  clean_names() %>% 
+  tibble::rownames_to_column(var = "RecordID") # this is a utility column for use in comparing with the original spreadsheet. No meaning to analysis.
+# names(p17)
+```
+
+> There are `r tally(u17)` records in the raw data set.
+
+
+**Date: potential missing data or entry errors**
+
+> A total of `r u17 %>% mutate(dateC = as.character(date)) %>% filter(is.na(dateC) | dateC == "2017") %>% tally()` records are have an NA or incomplete (e.g., only year) date.
+
+```{r}
+## basic cleaning
+# Treatment of date column. Imported as double...
+# convert to char and look at distinc levels
+u17 %>%
+  mutate(dateC = as.character(date)) %>%
+  # mutate(date = mdy(date)) %>% 
+  filter(is.na(dateC) | dateC == "2017") %>% 
+  select(1:7) %>% 
+  datatable(rownames = FALSE,caption = "Records with 'NA' for date or lacking a full date (e.g., '2017')")
+
+
+# Convert date  
+u17 <- u17 %>% 
+  mutate(date = mdy(date)) %>% 
+  mutate(mo = lubridate::month(date,label = TRUE)) %>%
+  mutate(year = year(date))
+
+```
+
+```{r, eval=FALSE}
+# print a table of field names. Compare with the 2001-2015 data
+p17 %>%
+  names() %>% 
+  as.tibble() %>% 
+  datatable(colnames = "Field names", rownames = FALSE)
+  # knitr::kable()
+# not needed since the field names are printed in the next chunk.
+
+```
+
+**2018 data** 
+
+### QA/QC and Cleaning
+
+```{r, warning=FALSE}
+skim.u17 <- skimr::skim(u17)
+## missing values
+skim.u17 %>% 
+  filter(stat == "missing") %>% 
+  select(variable, type, stat, value) %>% 
+  rownames_to_column(var = "FieldOrder") %>% # added to allow sorting in order presented in field form 
+  # arrange(-value) %>% 
+  datatable(rownames = FALSE, caption = "Missing values by variable. Use FieldOrder to resort fields in order found in spreadsheet.", filter = 'top')
+
+```
+
+> **Questions/Issues:**    
+> 1. We've got varying levels of "missingness" for various key fields (e.g., date, plant, stid, live). **Check field forms**
+
+
+#### Missing data
+
+Examine missing data. 
+
+**Missing data: stid**
+
+> There are `r u17 %>% filter(is.na(stid)) %>% tally()` records with a missing value for _"stid"_.  
+> There are `r u17 %>% filter(!is.na(stid)) %>% n_distinct()` distinct stid values.
+
+```{r, eval=TRUE}
+u17 %>% 
+  distinct(stid) %>% 
+  datatable(rownames = FALSE, caption = "Distinct stid")
+
+u17 %>% 
+  filter(is.na(stid)) %>% 
+  datatable(rownames = FALSE, caption = "Rows with missing data (NA) for stid")
+
+
+```
+
+
+```{r, eval=FALSE}
+# **Missing data: plant**
+# Note that plant isn;t even a column in the 2018/12 version
+# > There are `r u17 %>% filter(is.na(plant)) %>% tally()` records with a missing value for _"plant"_. 
+# > Should this be renamed to **"willid"**?  
+
+u17 %>% 
+  filter(is.na(plant)) %>% 
+  datatable(rownames = FALSE, caption = "Rows with missing data (NA) for plant")
+
+```
+
+**Missing data: live**
+
+> There are `r u17 %>% filter(is.na(live)) %>% tally()` records with a missing value for _"live"_. 
+
+```{r}
+
+u17 %>% 
+  filter(is.na(live)) %>% 
+  datatable(rownames = FALSE, caption = "Rows with missing data (NA) for 'live'")
+
+```
+
+```{r}
+# u17 %>%
+#   distinct(live)
+# 1 live   
+# 2 NA     
+# 3 dead   
+# 4 nd     
+# 5 DEAD   
+# 6 missing
+# 7 NEW    
+# 8 retag 
+
+u17 %>% 
+  group_by(live) %>% 
+  tally() %>% 
+  knitr::kable()
+
+```
+
+> **Questions/Issues:**    
+> *Need to standardize the encoding for the 'live' field:  
+> *"NEW"  to "retag"?  
+> *"NEW" vs "new"? 
+> *"DEAD" vs "dead"?  
+> *"nd" vs "NA" vs "missing"?  
+
+#### Browse scheme
+
+```{r}
+# u17 %>%
+#   names()
+#   distinct(br_scheme)
+
+u17 %>% 
+  group_by(br_sch) %>% 
+  tally() %>% 
+  arrange(br_sch) %>% 
+  knitr::kable()
+
+```
+
+> *Examine the records with Browse scheme = NA
+
+```{r}
+## 
+u17 %>%
+  filter(is.na(br_sch)) %>%
+  select(1:7,13:15) %>% 
+  datatable(rownames = FALSE, caption = "Browse scheme = NA")
+
+u17 %>%
+  group_by(br_sch) %>% 
+  tally() %>%
+  ggplot(aes(x=reorder(br_sch,n),y = n)) +
+  geom_point(size=4, color='red') +
+  geom_pointrange(aes(ymin = 0, ymax = n)) +
+  labs(x="br_scheme", y="n", title = "Count of br_scheme codes") +
+  coord_flip()
+
+```
+
+> **Questions/Issues:**
+> Are NA correct? 
+
+**unbrowse scheme**
+
+```{r}
+u17 %>% 
+  group_by(ubr_sch) %>% 
+  tally() %>% 
+  datatable(rownames = FALSE)
+
+u17 %>%
+  group_by(ubr_sch) %>% 
+  tally() %>%
+  ggplot(aes(x=reorder(ubr_sch,n),y = n)) +
+  geom_point(size=4, color='red') +
+  geom_pointrange(aes(ymin = 0, ymax = n)) +
+  labs(x="ub_scheme", y="n", title = "Count of ub_scheme codes") +
+  coord_flip()
+
+```
+
+> Not necessarily something to change, but the scheme fields are names differently between the production and utilization data sets. For example: ub_scheme in prod, ubr_sch in utilization. 
+> ubr_sch of 120: Is this correct? Some of the other scheme codes seem really big...
+
+### Clean and Combine Years
+
+### Export Archivable Version of Cleaned Data for Further Analysis

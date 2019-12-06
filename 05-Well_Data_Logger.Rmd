@@ -1,0 +1,156 @@
+# Well Data -- Data Loggers
+
+**Updated: `r format(Sys.time(), '%Y %B %d')`**
+
+## Introduction
+
+This section provides basic QA/QC assessments for the well logger data.
+
+Analyses aim to characterize basic data structure and identify potential issues, clean data as needed, then produce an archive-worthy output data.
+
+Because they originate as separate source files, 2016-2018 data are brought in and examined separately. In addition, data are cleaned to produce archival files for further analyses.
+
+```{r,echo=FALSE}
+# library(here)
+# here()
+# install.packages("bindrcpp")
+suppressPackageStartupMessages(library(tidyverse))
+library(fs)
+suppressPackageStartupMessages(library(sf))
+# library(raster)
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(readxl))
+# library(glue)
+suppressPackageStartupMessages(library(mapview))
+# library(ggmap)
+# library(ggrepel)
+suppressPackageStartupMessages(library(viridis))
+library(ggExtra)
+library(DT)
+library(kableExtra)
+suppressPackageStartupMessages(library(lubridate))
+library(anytime)
+suppressPackageStartupMessages(library(compare))
+suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(dataMaid))
+
+```
+
+
+### 2012-2015 (DCC Collection)
+
+#### Data import and initial inspection 
+```{r}
+# import of tsv 
+log.dat.raw <- readr::read_tsv("data/NSF_DataArchive20180208/Well_Logger_Data_2012-2015/Yell_Well_Data_Logger2012_2015.txt")
+
+log.dat <- log.dat.raw %>% 
+  clean_names() %>% 
+  tibble::rownames_to_column(var = "RecordID") 
+
+```
+
+```{r}
+## evaluate
+
+log.dat %>% glimpse()
+
+
+```
+
+
+> **Questions/Issues:**    
+> 1. There was some bad exporting in the DCC file. No useable time stamps -- everything is characterer in date format.     
+> 2. May wish to find the orginal logger data. This may work for daily aggregated data. Otherwise, not sure what to do with the 6 per-day records.  
+
+```{r}
+## data type changes
+log.dat <- log.dat %>% 
+  mutate(date = mdy(date))
+
+
+## what are the distinct wells?
+log.dat %>% 
+  distinct(site_logger)
+
+# note there are 19 distinct "site_logger" values and 19 distinct "serial_num"
+log.dat %>% 
+  distinct(serial_num)
+
+```
+
+```{r}
+dly.mean <- log.dat %>% 
+  group_by(site,site_logger, wat_id2, date) %>% 
+  summarise(mean.dly.abslevel = mean(abslevel,na.rm = TRUE), mean.water_column_m = mean(water_column_m, na.rm = TRUE))
+
+## add in year and mob=nth columns
+dly.mean <- dly.mean %>% 
+  mutate(yr = lubridate::year(date)) %>% 
+  mutate(month = lubridate::month(date)) %>% 
+  mutate(doy = lubridate::yday(date)) %>% 
+  mutate(doy.d = format(date, format="%m-%d"))
+
+
+dly.mean %>% 
+  ggplot(aes(x=date,y=mean.water_column_m)) +
+  geom_line(aes(color=site_logger)) +
+  labs(title = "Mean daily 'water_column_m' values") +
+  facet_wrap(~site)
+
+dly.mean %>% 
+  ggplot(aes(x=date,y=mean.dly.abslevel)) +
+  geom_line(color="blue") +
+  labs(title = "Mean daily 'abslevel' values") +
+  facet_wrap(~site, scales = "free_y")
+
+  
+```
+
+```{r, fig.height=15}
+## plot daily traces
+
+dly.mean %>% # names()
+  filter(month > 2 & month < 10) %>% 
+  mutate(yr = as.factor(yr)) %>% 
+  # ggplot(aes(x=doy,y=mean.water_column_m)) +
+  ggplot(aes(x=doy,y=mean.dly.abslevel)) +
+  geom_line(aes(color=yr)) +
+  labs(title = "Mean daily 'water_column_m' values") +
+  facet_wrap(~site_logger, scale = 'free_y', ncol = 3) +
+  theme_minimal()
+
+
+```
+
+
+
+### 2016 Data 
+#### Data import and initial inspection 
+
+```{r}
+
+```
+
+
+
+
+### 2017 Data 
+#### Data import and initial inspection 
+
+```{r}
+
+```
+
+
+### 2018 Data 
+#### Data import and initial inspection 
+
+```{r}
+
+```
+
+
+### Clean and Combine Years
+
+### Export Archivable Version of Cleaned Data for Further Analysis

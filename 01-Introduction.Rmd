@@ -1,0 +1,48 @@
+# Analysis Overview
+This document examines various datasets for including:  
+* Archived data in the "Digital Collections of Colorado" (DCC) library repository  
+* Data collected in 2016-2018  
+
+
+[Source:](https://yellowstonewillows.colostate.edu/data/)  
+
+## Experimental Design  
+
+
+## Plant Measurements  
+
+The data are structured hierarchically. Measurements are taken at three levels: 
+
+1. Shoots on stems
+
+2. Stems on plants  
+
+3. plants within sites 
+
+
+
+![Willow browse intensity measurements](img/BrowseIntensity.jpg)
+
+## Site Measurements
+
+1. Water table elevation via manual measurements of wells and staff gauges  
+
+2. Water level elevation through use of continuous dataloggers (pressure transducers) 
+
+3. Soil temperature using continuous dataloggers [add where, using what]  
+
+4. Meteorological data [add what was collected, where and when]
+
+5. Survey data [add survey data collected when and by whom]
+
+6. Remote sensing and GIS analyses
+
+
+## Session Info
+
+```{r}
+
+sessionInfo()
+
+```
+

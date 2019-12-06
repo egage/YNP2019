@@ -1,0 +1,320 @@
+# Climate Data
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+**Updated:** `r format(Sys.time(), '%d %B, %Y')`
+
+## Introduction  
+
+This section analyzes daily climate data from NOAA weather stations (Global Historical Climatology Network, GHCN) in the park. The initial focus is on two stations:
+
+**TOWER FALLS, WY US**  
+Station ID: GHCND:USC00489025  
+Latitude/Longitude:	44.91653°, -110.42033°  
+Elevation:	1912.6 m  
+Start Date:	1948-08-01  
+End Date:	2018-10-20  
+Data Coverage:	94%  
+
+**YELLOWSTONE PARK MAMMOTH, WY US**  
+Station ID: GHCND:USC00489905  
+Period of Record:  1894-01-01 to 2018-10-11  
+Latitude/Longitude:	44.97668°, -110.6964°  
+Elevation:	1888.2 m  
+Start Date:	1894-01-01  
+End Date:	2018-10-11  
+Data Coverage:	67%  
+
+
+```{r,echo=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+library(fs)
+suppressPackageStartupMessages(library(sf))
+# library(raster)
+library(janitor)
+suppressPackageStartupMessages(library(lubridate))
+library(readxl)
+# library(devtools)
+# install_github("mtennekes/tmaptools")
+# install_github("mtennekes/tmap")
+# suppressPackageStartupMessages(library(tmap))
+# library(tmaptools)
+suppressPackageStartupMessages(library(mapview))
+# library(ggmap)
+# library(ggrepel)
+suppressPackageStartupMessages(library(viridis))
+library(ggExtra)
+library(DT)
+library(kableExtra)
+suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(naniar))
+suppressPackageStartupMessages(library(trelliscopejs))
+suppressPackageStartupMessages(library(textclean))
+library(recoder)
+```
+
+Some other potential stations for analysis include:  
+GARDINER, MT US  
+View Full Details: https://www.ncdc.noaa.gov/cdo-web/datasets/GHCND/stations/GHCND:USC00243378/detail  
+Station ID: GHCND:USC00243378  
+Period of Record:  1956-04-12 to 2018-10-20  
+
+LAKE YELLOWSTONE, WY US  
+Station ID: GHCND:USC00485345  
+Period of Record:  1904-01-01 to 2018-08-31  
+
+### Variables
+
+Daily observations of the following variables are provided in the source GHCND file:
+
+DAPR - Number of days included in the multiday precipitation total (MDPR)  
+TOBS - Temperature at the time of observation  
+MDPR - Multiday precipitation total (use with DAPR and DWPR)  
+PRCP = Precipitation (tenths of mm)  
+SNOW = Snowfall (mm)  
+SNWD = Snow depth (mm)  
+TMAX = Maximum temperature (deg. C)  
+TMIN = Minimum temperature (deg. C)  
+
+
+```{r}
+# read in csv from NOAA
+
+data.import <- read_csv("data/NOAA_climate/1514059.csv")
+
+# data.import %>%
+#   distinct(STATION) 
+
+```
+
+```{r}
+# take the raw import file and add some additional fields (e.g., month, year, etc.)
+
+mam.tow <- data.import %>% 
+  select(STATION, DATE, PRCP, TMAX, TMIN, SNOW) %>%
+  mutate(PRCP_mm = PRCP/10) %>% 
+  mutate(yr = year(DATE)) %>% 
+  mutate(moDate = mday(DATE)) %>%
+  mutate(month = as.factor(month(DATE, label = TRUE))) %>% # not working
+  # mutate(month = lubridate::month(fks$Date.t, label = TRUE)) %>% # NOT working
+  mutate(month.num = month(DATE)) %>% 
+  # mutate(month = month.abb[month.num]) %>% 
+  mutate(doy = yday(DATE)) %>%
+  # mutate(yr.bin = case_when(yr <=1920 ~ "<=1920",
+  #                          yr >= 1920 &  < 1940 ~ "1920-1940",
+  #                          yr > 1940 ~ ">1940"))
+  mutate(yr.bin = recoder::recoder(yr,'<=1920: "<=1920"; >=1920 &  <1940: "1920-1940"; >=1940 & <1960 : "1940-1960"; >=1960 & <1980: "1960-1980"; >=1980 & <2000: "1980-2000"; >=2000: "2000-present"')) %>%
+  mutate(season = recoder(month.num, ' >=1 & <=4:"Oct-Apr"; >=5 & <10:"May-Sep"; >=10 & <=12:"Oct-Apr" ')) %>% 
+  mutate(STA.name = case_when(STATION == "USC00489025" ~ "Tower",
+                              STATION == "USC00489905" ~ "Mammoth"))
+
+
+```
+
+
+```{r CalcNormalsDly, eval=TRUE}
+
+## Calculate mean daily by doy for 1980-2010
+mam.tow.80.10normals <- mam.tow %>% 
+  filter(yr >=1980 & yr <2010) %>%
+  group_by(STATION, doy) %>% 
+  summarise(mean80.10tmax = mean(TMAX,na.rm = TRUE), mean80.10tmin = mean(TMIN,na.rm = TRUE), mean80.10prcp = mean(PRCP_mm,na.rm = TRUE))
+
+# join to fks
+mam.tow <- left_join(mam.tow,mam.tow.80.10normals) %>% 
+  mutate(STA.name = case_when(STATION == "USC00489025" ~ "Tower",
+                              STATION == "USC00489905" ~ "Mammoth"))
+
+```
+
+## Results  
+
+### Monthly Temperature
+
+```{r MthNormalCalcTemp, eval=TRUE}
+
+mam.tow80.10mnthTemp.norm <- mam.tow %>% 
+  filter(yr >=1980 & yr <2010) %>%
+  group_by(STATION, month) %>% 
+  summarise(moMean80.10tmax = mean(TMAX,na.rm = TRUE), moMean80.10tmin = mean(TMIN,na.rm = TRUE))
+
+mam.tow.mnth.mean <- mam.tow %>% 
+  group_by(STATION, yr, month) %>% 
+  summarise(mean.tmax = mean(TMAX,na.rm = TRUE), mean.tmin = mean(TMIN,na.rm = TRUE))
+
+
+mo.temp.normals <- left_join(mam.tow.mnth.mean, mam.tow80.10mnthTemp.norm) %>% 
+  mutate(STA.name = case_when(STATION == "USC00489025" ~ "Tower",
+                              STATION == "USC00489905" ~ "Mammoth"))
+
+mo.temp.normals <- mo.temp.normals %>% 
+  mutate(dif.norm.tmax = mean.tmax - moMean80.10tmax) %>% 
+  mutate(dif.norm.tmin = mean.tmin - moMean80.10tmin) %>% 
+  mutate(TmaxDiff.col = recoder(dif.norm.tmax, '<=0: "Neg"; >0: "Pos"')) %>% 
+  mutate(TminDiff.col = recoder(dif.norm.tmin, '<=0: "Neg"; >0: "Pos"'))
+
+```
+
+#### Temperature difference from 1980-2010 monthly mean
+
+Mean daily maximum calculated for each month of the year minus the mean daily maximum temperature for the period 1980-2010   
+
+**Tower** 
+
+```{r TmaxDiffFromNormT, eval=TRUE, fig.height=12}
+mo.temp.normals %>% 
+  filter(STATION == "USC00489025") %>% 
+  ggplot(aes(x = yr, y = dif.norm.tmax)) + 
+  geom_bar(stat='identity', aes(fill = TmaxDiff.col)) +
+  # geom_smooth(se = FALSE, color = "black", size = 1.5, linetype = "dash") +
+  facet_wrap(~month, scales = 'free', ncol=2) +
+  labs(x = "", y = "Temperature (C)", fill ="", title = "Temperature difference from 1980-2010 mean", subtitle = "Tower Falls, WY US (Station ID: GHCND:USC00489025)") +
+  guides(fill=FALSE) +
+  scale_x_continuous(breaks = seq(1905,2016,10)) +  
+  theme_bw()  
+
+```
+
+
+**Mammoth**
+
+```{r TmaxDiffFromNormz, eval=TRUE, fig.height=12}
+mo.temp.normals %>% 
+  filter(STATION == "USC00489905") %>% 
+  ggplot(aes(x = yr, y = dif.norm.tmax)) + 
+  geom_bar(stat='identity', aes(fill = TmaxDiff.col)) +
+  # geom_smooth(se = FALSE, color = "black", size = 1.5, linetype = "dash") +
+  facet_wrap(~month, scales = 'free', ncol=2) +
+  labs(x = "", y = "Temperature (C)", fill ="", title = "Temperature difference from 1980-2010 mean", subtitle = "MAMMOTH, WY US (Station ID: GHCND:USC00489905)") +
+  guides(fill=FALSE) +
+  scale_x_continuous(breaks = seq(1905,2016,15)) +  
+  theme_bw()  
+
+
+```
+
+
+#### Summer Monthly Temperature
+
+Mean daily maximum calculated for each month of the year minus the mean daily maximum temperature for the period 1980-2010: June to Sept  
+
+**Tower**
+
+
+```{r TmaxMnthJulyAugTow, eval=TRUE, fig.height = 8}
+
+mo.temp.normals %>% 
+  filter(STA.name == "Tower") %>% 
+  filter(month == "Jun" | month == "Jul" | month == "Aug" | month == "Sep") %>% 
+  ggplot(aes(x = yr, y = mean.tmax)) +
+  # geom_bar(stat='identity', fill = 'cyan', color = 'black') +
+  geom_point(color = 'cyan', color = 'black') +
+  # geom_point(fill = 'blue') +
+  geom_line(aes(y = moMean80.10tmax), size = 1.7, alpha=0.2, color = 'red3')+
+  geom_smooth(se = FALSE) +
+  facet_wrap(~month, scales = 'free', ncol=2) +
+  labs(x = "", y = "Temperature (C)", fill ="", title = "Monthly Mean Daily Maximum Temperature", subtitle = "Tower Falls WY US (Station ID: GHCND:USC00489025). Red line indicates 1980-2010 mean, blue line a LOESS smoother fit to points") +
+  # guides(fill=FALSE) +
+  scale_x_continuous(breaks = seq(1905,2018,10)) +
+  # coord_cartesian(ylim=c(18, 27)) +
+  # scale_y_continuous(breaks=seq(16,28,1)) +
+  theme_bw()
+
+```
+
+**Mammoth**
+
+
+```{r TmaxMnthJulyAugMam, eval=TRUE, fig.height = 8}
+
+mo.temp.normals %>% 
+  filter(STA.name == "Mammoth") %>% 
+  filter(month == "Jun" | month == "Jul" | month == "Aug" | month == "Sep") %>% 
+  ggplot(aes(x = yr, y = mean.tmax)) +
+  # geom_bar(stat='identity', fill = 'cyan', color = 'black') +
+  geom_point(color = 'cyan', color = 'black') +
+  # geom_point(fill = 'blue') +
+  geom_line(aes(y = moMean80.10tmax), size = 1.7, alpha=0.2, color = 'red3')+
+  geom_smooth(se = FALSE) +
+  facet_wrap(~month, scales = 'free', ncol=2) +
+  labs(x = "", y = "Temperature (C)", fill ="", title = "Monthly Mean Daily Maximum Temperature", subtitle = "Mammoth WY US (Station ID: GHCND:USC00489905). Red line indicates 1980-2010 mean, blue line a LOESS smoother fit to points") +
+  # guides(fill=FALSE) +
+  scale_x_continuous(breaks = seq(1905,2018,15)) +
+  # coord_cartesian(ylim=c(18, 27)) +
+  # scale_y_continuous(breaks=seq(16,28,1)) +
+  theme_bw()
+
+```
+
+
+### Monthly Precipitation
+
+```{r MnthNormalPrcp, eval=TRUE}
+# calc the sum of each month for period 1980 to 2010, then average these by month
+mam.tow80.10mnthPRCP.norm <- mam.tow %>% 
+  filter(yr >=1980 & yr <2010) %>%
+  group_by(STATION, yr, month) %>% 
+  summarise(moSum80.10prcp = sum(PRCP_mm)) %>% 
+  ungroup() %>% 
+  group_by(month) %>% 
+  summarize(mean.moPrcp80.10 = mean(moSum80.10prcp, na.rm = TRUE))
+
+# join output of above to monthly summarized data for entire record
+prcp.norm.dev <- mam.tow %>% 
+  # filter(yr >=1980 & yr <2010) %>%
+  group_by(STATION, yr, month) %>% 
+  summarise(moSum.prcp = sum(PRCP_mm), cnt.rec = n())
+
+
+prcp.norm.dev <- left_join(prcp.norm.dev, mam.tow80.10mnthPRCP.norm, by = 'month') 
+
+# calculate the devaince from the 1980 norm for each year/month plus the percentage by yr.mo of the 1980-2010 norm
+prcp.norm.dev <- prcp.norm.dev %>% 
+  mutate(prcp.dev.from.norm = moSum.prcp - mean.moPrcp80.10) %>% 
+  # mutate(percent.of.normal = round(((100*moSum.prcp/mean.moPrcp80.10)-100),1)) %>%
+  mutate(percentDiff.of.normal = (moSum.prcp/mean.moPrcp80.10*100)-100) %>%
+  mutate(DevColor = recoder(percentDiff.of.normal, '<=0: "Neg"; >0: "Pos"'))
+
+```
+
+#### Percent deviation from 1980-2010 normal
+
+**Tower**  
+
+```{r DevPrcpMonthBarplotTower, eval=TRUE, fig.height=12}
+
+prcp.norm.dev %>% 
+  filter(STATION == "USC00489025") %>% 
+  ggplot(aes(x = yr, y = percentDiff.of.normal)) +
+  geom_bar(stat='identity', aes(fill = DevColor)) +
+  # geom_smooth(se = FALSE, color = "black", size = 1.5, linetype = "dash") +
+  facet_wrap(~month, scales = 'free', ncol=2) +
+  labs(x = "", y = "% difference from normal", fill ="", title = "Percent difference of monthly precipitation from 1980-2010 mean",subtitle = "Tower Falls, WY US (Station ID: GHCND:USC00489025)") +
+  guides(fill=FALSE) +
+  scale_x_continuous(breaks = seq(1890,2016,10)) +  
+  theme_bw()
+
+```
+
+**Mammoth**  
+
+```{r DevPrcpMonthBarplot, eval=TRUE, fig.height=12}
+
+prcp.norm.dev %>% 
+  filter(STATION == "USC00489905") %>% 
+  ggplot(aes(x = yr, y = percentDiff.of.normal)) +
+  geom_bar(stat='identity', aes(fill = DevColor)) +
+  # geom_smooth(se = FALSE, color = "black", size = 1.5, linetype = "dash") +
+  facet_wrap(~month, scales = 'free', ncol=2) +
+  labs(x = "", y = "% difference from normal", fill ="", title = "Percent difference of monthly precipitation from 1980-2010 mean",subtitle = "Mammoth, WY US (Station ID: GHCND:USC00489905)") +
+  guides(fill=FALSE) +
+  scale_x_continuous(breaks = seq(1890,2016,15)) +  
+  theme_bw()
+
+```
+
+
+

@@ -1,0 +1,1114 @@
+---
+title: "Willow Height - Data Processing Report"
+output:
+  html_document: 
+    theme: journal
+    toc: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+# knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'center')
+# opts_knit$set(root.dir=normalizePath('../')) # this is required if Rmd is nested below the project directory
+
+# opts_chunk$set(fig.path = "../output/figures/") # corrected path and added dev. Needed to specify a subdirectory for figs
+
+```
+
+**Updated:** `r format(Sys.time(), '%d %B, %Y')`
+
+# Introduction  
+
+This document evaluates willow height measurement data from project inception through 2019. Data include those archived on the "Digital Collections of Colorado" (DCC) library site and more recent (2015-2019) data. These analyses are aimed at identifying potential issues such as:
+
+* Inconsistently named factors such as site name or well ID    
+* Missing values  
+* Data values outside of expected range or showing unusual patterns
+
+DCC links:  
+Plant level fall current annual growth and height on experimental plots in Yellowstone's Northern Range, 2002 - 2015: http://hdl.handle.net/10217/173649  
+Plant level fall current annual growth and height on observation plots in Yellowstone's Northern Range, 2008 - 2015: http://hdl.handle.net/10217/173657
+
+__Associated Publications:__
+Marshall Kristin N., N. Thomson Hobbs and David J. Cooper. Stream Hydrology Limits Recovery of Riparian Ecosystems After Wolf Reintroduction. Proceedings of the Royal Society. B 280, issue 1756 (April 7, 2013): 20122977. http://dx.doi.org/10.1098/rspb.2012.2977
+
+Marshall, Kristin N., David J. Cooper, N. Thompson Hobbs. Interactions Among Herbivory, Climate, Topography and Plant Age Shape Riparian Willow Dynamics in Northern Yellowstone National Park, USA. Journal of Ecology 102, issue 3 (May 2014): 667-677. http://dx.doi.org/10.1111/1365-2745.12225
+
+
+```{r,echo=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+library(fs)
+suppressPackageStartupMessages(library(sf))
+# library(raster)
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(readxl))
+# library(glue)
+suppressPackageStartupMessages(library(mapview))
+# library(ggmap)
+# library(ggrepel)
+suppressPackageStartupMessages(library(viridis))
+library(ggExtra)
+library(ggrepel)
+library(DT)
+# library(kableExtra)
+# suppressPackageStartupMessages(library(compare))
+suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(dataMaid))
+library(lubridate)
+library(gt)
+```
+
+# Data Import and Initial Processing
+
+## DCC
+```{r, message=FALSE, warning=FALSE}
+
+## Note: the following reads in files in different stages of development (entry, error correction, etc.). The object name is retained to allow plotting and analysis functions to proceed.
+
+## provisional 20180227
+# w_ht <- read_excel("data/Select_files/willow_height/2016_2017_Data_Entry_Format_WillowHt_20180227.xlsx")
+
+## revised 20180228
+# w_ht <- read_excel("data/Select_files/willow_height/WillowHt_2001_2017_Final.xlsx")
+
+## Downloaded from the GDr 20180321
+# w_ht2 <- read_excel("D:/Dropbox/PROJECTS/Yell_NSF/YellNSF_Rstudio/data/LM_working/2016_2017_Data_Entry_Format_WillowHt_2001_2015.xlsx")
+
+# dataframe comparisons
+# setdiff(bigFrame, smallFrame) # dplyr solution for comparison
+# comp <- setdiff(w_ht,w_ht2)
+
+# Using functions in "comparison" package
+# comparison <- compare(w_ht,w_ht2,allowAll=TRUE)
+
+## Continuing with the file downloaded from the GDr 20180321
+w_ht <- read_excel("data/raw/ht/2016_2017_Data_Entry_Format_WillowHt_2001_2015.xlsx")
+
+w_ht01_17 <- read_excel("data/raw/ht/WillowHt_2001_2017_QAQCd_Version.xlsx")
+
+# w_ht01_17 %>% 
+#   distinct(site) %>% 
+#   datatable()
+
+## read in most recent file
+
+
+
+```
+
+
+
+```{r}
+
+### Pre-process data
+# 
+# * Type conversions (e.g., ID's, treatment codes to character) 
+# * Identify then filter NA/missing for "plantht" 
+# * Create fields defining treatment classes and incorporate into siteid ("siteid2", as defined in the water table dataset) 
+# * Create field combining willowid (not unique across all records) with site2  
+# 
+# # RETURN HERE FOR FOR MORE QA QC
+# 
+# 
+# # convert willow id, dam, browse, exp to character instead of integer
+# w_ht <- w_ht %>% 
+#   mutate(willid = as.character(willid)) %>% 
+#   mutate(exp = as.character(exp)) %>% 
+#   mutate(dam = as.character(dam)) %>% 
+#   mutate(browse = as.character(browse))
+# 
+# # create table of just the missing/NA for inspection
+# w_ht %>%
+#   filter(plantht == "na" | plantht == "missing" | plantht == "NA") %>% 
+#   datatable(caption = "Records with missing/NA/na for plantht.")
+# 
+# ## filter out "NA", "na" and "missing"; convert "plantht" to numeric; create treatment classes in incorporate into new ID fields for summarization
+# # w_ht <- w_ht %>%
+# #   filter(plantht != "na" & plantht != "missing" & plantht != "NA") %>%
+# #   mutate(plantht = as.numeric(plantht)) %>%
+# #   mutate(treat = case_when(dam == 1 & browse == 0 ~ "DX",
+# #                            dam == 1 & browse == 1 ~ "DC",
+# #                            dam == 0 & browse == 0 ~ "CX",
+# #                            dam == 0 & browse == 1 ~ "CC",
+# #                            dam == 2 & browse == 1 ~ "OBS")) %>%
+# #   mutate(site2 = paste(site, treat, sep = '-')) %>%
+# #   mutate(willid.site2 = paste(willid, site2, sep = '-'))
+# # Note that this doesn't correctly parse the exp and obs sites, as TH pointed out. 
+# # So instead see the following modified code:
+###
+w_ht <- w_ht %>%
+  filter(plantht != "na" & plantht != "missing" & plantht != "NA") %>% 
+  mutate(plantht = as.numeric(plantht)) %>% 
+  mutate(treat = case_when(dam == 1 & browse == 0 ~ "DX",
+                           dam == 1 & browse == 1 ~ "DC",
+                           dam == 0 & browse == 0 ~ "CX",
+                           dam == 0 & browse == 1 & exp == 1 ~ "CC",
+                           dam == 0 & browse == 1 & exp != 1 ~ "OBS",
+                           dam == 0 & browse == 1 ~ "CC",
+                           dam == 2 & browse == 1 ~ "OBS")) %>% 
+  mutate(site2 = paste(site, treat, sep = '-')) %>%
+  mutate(willid.site2 = paste(willid, site2, sep = '-')) 
+
+w_ht %>% 
+  filter(exp != 1) %>% 
+  distinct(dam,browse,treat)
+
+
+# w_ht %>%
+#   filter(dam == "2")
+
+# Apparently not all willid unique
+
+# not sure on the interpretation of the "2"
+# w_ht %>% distinct(dam) # Three values: 0,1,2. Expected only 0,1.
+# added the site2 field to match that used in well data 
+
+# datatable(w_ht, caption = "Willow height data imported 20180321.")
+
+# Tip: if you are testing a scalar, use if(). Testing a vector against a single condition, dplyr::if_else. Testing a vector against multiple conditions, use case_when.
+  
+```
+
+
+## 2018 Fall Data
+ 
+```{r}
+# updated as of 20191203
+files2018 <- fs::dir_ls("./data/raw/production/Raw_2018_Production", recurse = FALSE, glob = "*.xlsx")
+
+library(readxl)
+
+## orignal way. works but only reads in one sheet!!
+# #for each excel file name, read excel sheet and append to df
+# p18 <- files2018 %>% 
+#   map_df( ~ read_excel(path = .x,trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV46"))
+# # note use of specific range and skipping of column
+
+
+##### Function to read in sheets and tabs
+
+read_sheets <- function(file){
+  xlsx_file <- file
+  xlsx_file %>%
+    excel_sheets() %>%
+    set_names() %>%
+    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV46") %>% 
+    mutate(file_name = file) %>% 
+    select(file_name, sheet_name, everything())
+}
+
+
+#### running the above function on 2018 data
+p18 <- files2018 %>% 
+  map_df(~ read_sheets(.))
+
+
+p18 <- p18 %>% 
+  janitor::clean_names() %>% 
+  mutate(yr = 2018) %>% 
+  mutate(season = "fall")
+
+# set date
+p18 <- p18 %>% 
+  mutate(date = ymd(date))
+
+
+```
+
+```{r, eval=FALSE}
+
+### sandbox for reading in multiple multi-tabbed workbooks
+library(tidyverse)
+library(readxl)
+
+dir_path <- "~/data/raw/production/Raw_2018_Production/"         # target directory path where the xlsx files are located. 
+re_file <- "^test[0-9]\\.xlsx"    # regex pattern to match the file name format, in this case 
+
+dir_path <- "~/test_dir/"         # target directory path where the xlsx files are located. 
+re_file <- "^test[0-9]\\.xlsx"    # regex pattern to match the file name format, in this case 'test1.xlsx', 'test2.xlsx' etc, but could simply be 'xlsx'.
+
+read_sheets <- function(dir_path, file){
+  xlsx_file <- paste0(dir_path, file)
+  xlsx_file %>%
+    excel_sheets() %>%
+    set_names() %>%
+    map_df(read_excel, path = xlsx_file, .id = 'sheet_name') %>% 
+    mutate(file_name = file) %>% 
+    select(file_name, sheet_name, everything())
+}
+
+df <- list.files(dir_path, re_file) %>% 
+  map_df(~ read_sheets(dir_path, .))
+
+```
+
+```{r}
+## Select subset and type cast
+p18sel <- p18 %>% 
+  select(yr, season, date, site, plot, spp, wilid, pl_ht_cm, stid, live_status) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) 
+
+p18sel %>% 
+  glimpse()
+
+# eliminate duplicate rows 
+p18sel <- p18sel %>% 
+  distinct()
+
+```
+
+## 2019 Fall Data
+
+```{r}
+
+# updated as of 20191203
+files2019 <- fs::dir_ls("./data/raw/production/Raw_2019_Production", recurse = FALSE, glob = "*.xlsx")
+
+# ## original way
+# #for each excel file name, read excel sheet and append to df
+# p19 <- files2019 %>% 
+#   map_df( ~ read_excel(path = .x,trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV46"))
+# 
+
+#### running the above function on 2018 data
+p19 <- files2019 %>% 
+  map_df(~ read_sheets(.))
+
+
+p19 <- p19 %>% 
+  janitor::clean_names() %>% 
+  mutate(yr = 2019) %>% 
+  mutate(season = "fall")
+
+# set date
+p19 <- p19 %>% 
+  mutate(date = ymd(date))
+
+
+## Select subset and type cast
+p19sel <- p19 %>% 
+  select(yr, season, date, site, plot, spp, wilid, pl_ht_cm, stid, live_status) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) 
+
+p19sel %>% 
+  glimpse()
+
+# eliminate duplicate rows 
+p19sel <- p19sel %>% 
+  distinct()
+
+## combine 18 and 19
+p18p19sel <- bind_rows(p18sel, p19sel)
+
+# make all lower
+p18p19sel <- p18p19sel %>%  
+  mutate_if(.predicate = is.character,.funs=tolower)
+
+p18p19sel <- p18p19sel %>%
+  filter(!is.na(site))
+
+```
+
+
+```{r}
+
+# remove records that have na for wilid
+p18p19sel <- p18p19sel %>% 
+  filter(!is.na(wilid)) %>%
+  filter(!is.na(site)) %>% 
+  filter(!is.na(pl_ht_cm))
+
+# p18p19sel %>%
+#   filter(is.na(pl_ht_cm)) %>%
+#   gt()
+  
+## summarize the willow height by wilid and year
+p1819.wilidht <- p18p19sel %>% 
+  group_by(yr, site, wilid) %>% 
+  summarise(pl_ht_cm = max(pl_ht_cm)) %>% 
+  ungroup()
+
+# eliminate the na for plant height
+# p1819.wilidht %>%
+#   filter(is.na(pl_ht_cm)) %>% 
+#   gt() %>% 
+#   tab_header(title = "Records with NA for plant ht ")
+
+# eliminate the na for plant height
+p1819.wilidht <- p1819.wilidht %>%
+  filter(!is.na(pl_ht_cm))
+
+
+```
+
+
+## 2018 Spring Data
+```{r}
+ufiles2018 <- fs::dir_ls("./data/raw/utilization/Raw_2018_Utilization", recurse = FALSE, glob = "*.xlsx")
+
+u18 <- ufiles2018 %>%
+  map_df( ~ read_excel(path = .x,trim_ws = TRUE, skip = 1, col_types = "text"))
+
+# map_df( ~ read_excel(path = .x,trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV46"))
+# # note use of specific range and skipping of column
+
+u18 <- u18 %>% 
+  janitor::clean_names() %>% 
+  mutate(yr = 2018) %>% 
+  mutate(season = "spring") 
+
+u18 %>% 
+  names() %>%
+  tibble::enframe(name = NULL) %>% 
+  gt() %>% 
+  tab_header(title = "variable names")
+
+### select subset of columns: for UTILIZATION
+# u18.sel <- u18 %>%
+#   # glimpse()
+#   select(c('date','yr','season', 'site','wilid','stid', 'live_status', 'scheme','height_cm','spp','len_dia'), contains("sht"),contains("x"))
+
+### select subset of columns: for height
+u18.ht <- u18 %>%
+  # glimpse()
+  select(c('date','yr','season', 'site','wilid','willid','stid', 'live_status', 'height_cm'))
+```
+
+```{r}
+
+u18.ht <- u18.ht %>% 
+  rename(pl_ht_cm = height_cm) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) 
+
+# clean
+u18.ht <- u18.ht %>% 
+  filter(!(is.na(willid) & is.na(wilid))) %>% 
+  distinct()
+
+## try to hand willow id
+u18.ht <- u18.ht %>% 
+  mutate(wilid = case_when(is.na(willid) ~ wilid, 
+                         is.na(wilid) ~ willid,
+                         TRUE ~ "oth")) 
+
+u18.ht %>%
+  View()
+  
+## date looks unrelieable. Will lose data if remove and can use year
+
+```
+
+
+```{r}
+u18.sel %>% 
+  visdat::vis_cor()
+```
+
+
+```{r}
+## Select subset and type cast
+u18sel <- u18 %>% 
+  select(yr, season, date, site, plot, spp, wilid, pl_ht_cm, stid, live_status) %>% 
+  
+
+u18sel %>% 
+  glimpse()
+
+
+u18sel %>% 
+  pivot
+
+```
+
+## 2019 Spring Data
+
+## Combine
+```{r}
+
+##### Creating an export file to update out of R
+## read in the most current version below this section
+## create lu for exp trt
+# wilid.lu <- w_ht %>% 
+#   distinct(site, wilid, treat, exp, dam, browse)
+# 
+# ## join with info
+# wilid.lu.2update <- left_join(p1819.wilidht, wilid.lu) %>% 
+#   distinct(site, wilid, treat, exp, dam, browse) %>% 
+#   filter(is.na(treat)) %>% 
+#   bind_rows(.,wilid.lu)
+# 
+## wilid.lu.2update %>% 
+##   write_csv("./data/wilid_lookup_master.csv") # have manually updated this output, read in below
+
+#############
+
+####### read in the lu
+
+wilid.lu <- read_csv("./data/wilid_lookup_master.csv",col_types = "ccccccc")
+
+# change willid to wilid  
+# make everything lowercase
+w_ht <- w_ht %>%
+  rename(wilid = willid) %>%  
+  mutate_if(.predicate = is.character,.funs=tolower)
+
+## join with info
+p1819.wilidht <- left_join(p1819.wilidht, wilid.lu)
+
+# p1819.wilidht %>% 
+#   filter(is.na(treat)) %>% 
+#   View()
+
+## missing values for 
+p1819.wilidht %>%
+  filter(is.na(pl_ht_cm)) %>% 
+  gt() %>% 
+  tab_header(title = md("Missing data for plant height"))
+
+## eliminate NA fpr plant ht
+p1819.wilidht <- p1819.wilidht %>% 
+  filter(!is.na(pl_ht_cm)) # 29 records with NA for height
+
+p1819.wilidht %>% 
+  glimpse()
+
+```
+
+```{r}
+# fall ht, trim columns to allow joining
+w_ht <- w_ht %>% 
+  filter(season == "fall") %>% 
+  select(-c(season, ID, willid.site2)) 
+
+# make type consistent for plant height
+w_ht <- w_ht %>%
+  rename(pl_ht_cm = plantht) %>% 
+  mutate(yr = as.character(year))
+
+w_ht %>% 
+  glimpse()
+
+# give site teh site_m value (made consistent for sites like cresc/crescent)
+p1819.wilidht <- p1819.wilidht %>% 
+  mutate(site = site_m) %>% 
+  mutate(yr = as.character(yr))
+
+p1819.wilidht %>% 
+  glimpse()
+
+### combine
+
+p1819.wilidht <- p1819.wilidht %>% 
+  select(c(yr, site, wilid, pl_ht_cm, treat, exp, dam, browse)) 
+
+w_ht <- w_ht %>% 
+  select(c(yr, site, wilid, pl_ht_cm, treat, exp, dam, browse))%>% 
+  mutate(wilid = as.character(wilid)) %>% 
+  mutate(exp = as.character(exp)) %>%
+  mutate(dam = as.character(dam)) %>% 
+  mutate(browse = as.character(browse))
+
+ht.combined <- bind_rows(p1819.wilidht, w_ht)
+
+## clean
+ht.combined <- ht.combined %>% 
+  mutate(site = case_when(site == "halibuff" ~ "hailbuff",
+                          TRUE ~ site))
+
+ht.combined <- ht.combined %>% 
+  mutate(site2 = paste0(site,"-",treat))
+
+ht.combined <- ht.combined %>% 
+  distinct()
+
+
+```
+
+```{r}
+
+# ht.combined %>% 
+#   group_by(yr, wilid, site2) %>% 
+#   summarise(n= n()) %>%
+#   filter(n>1)
+
+## clean eronious record for elk
+ht.combined <- ht.combined %>% 
+  filter(!(wilid == "570" & pl_ht_cm == 283)) %>% 
+  filter(!is.na(site)) %>% 
+  mutate(yr = as.numeric(yr))
+
+## find missing data
+ht.combined %>% 
+  group_by(yr, site2) %>% 
+  summarise(n= n()) %>% 
+  ggplot(aes(yr, site2)) +
+  geom_tile(aes(fill = n), color = 'black')
+# ggsave("./output/output4qaqc/height_heatmap20191204 1937.pdf", width = 11, height = 8.5)
+
+
+
+```
+
+```{r}
+# ht.combined %>%
+#   write_csv("./output/output4qaqc/ht_combined20191205_0809.csv")
+```
+
+
+
+---
+```{r, echo=FALSE, eval = FALSE}
+# Sandbox
+
+# 17 raw production data
+p17sel <- p17 %>% 
+  select(date, site, plot, spp, wildid, height_cm, stem_id, live) 
+
+p17sel <- p17sel %>% 
+  rename(stid = stem_id) %>% 
+  rename(wilid = wildid) %>% 
+  rename(pl_ht_cm = height_cm) %>% 
+  rename(live_status = live)
+
+p17sel %>%
+  glimpse()
+
+# fix formating of wilid
+p17sel <- p17sel %>% 
+  mutate(wilid = as.integer(wilid)) %>% 
+  mutate(wilid = as.character(wilid)) %>%
+  # mutate(date = as.integer(date)) %>% 
+  # mutate(date = as.character(date)) %>%
+  mutate(stid = as.integer(stid)) %>% 
+  mutate(stid = as.character(stid)) %>%
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
+
+p18p19sel %>% names()
+
+## bring in 17
+p17p18p19sel <- bind_rows(p17sel, p18p19sel)
+
+## change  stid for stem_id
+## live_status
+## stem_id ~ stid
+## height_cm
+
+```
+
+```{r, echo=FALSE}
+# > **Questions/Issues:**    
+# > 1. "NA", "na" and "missing" inconsistently used for 'plantht' [fixed] 
+# > 2. Not sure on the interpretation of the "2" for the dam field. Three unique values: 0,1,2. Expected only 0 and 1. Interprete as "obs"
+# > 3. Any special meaning to "ID" field or is this a file-specific index? 
+# > 4. In previous QA/QC checks, it was noted that willid is not unique across all sites. Temporary fix combining "willid" and siteid
+```
+
+
+```{r, echo=FALSE, eval=TRUE}
+## summarize by site2 and year using skimr
+
+summary.by.site2 <- ht.combined %>% 
+  # filter(wilid == "924") %>% 
+  filter(!is.na(site)) %>% 
+  mutate(year = as.factor(yr)) %>% 
+  group_by(site, treat, site2,yr) %>%
+  nest() %>% 
+  mutate(skim2 = map(data,skim)) %>% 
+  unnest(skim2) %>% 
+  ungroup()
+
+## line plot
+summary.by.site2 %>%
+  mutate(yr = as.numeric(yr)) %>% 
+  filter(skim_variable == 'pl_ht_cm') %>%
+  filter(treat != "obs") %>% 
+  filter(!(site2 == "elk-dx" & yr == 2019)) %>% 
+  ggplot(aes(yr)) +
+  # geom_ribbon(aes(ymin = numeric.p25, ymax = numeric.p75, fill = treat), alpha = 0.21) +
+  geom_line(aes(y=numeric.p50, color = treat)) +
+  geom_point(aes(y=numeric.p50, color = treat)) +
+  geom_pointrange(aes(y = numeric.p50, ymin = numeric.p25, ymax = numeric.p75, color = treat), alpha = 0.31) +
+  facet_wrap(~site) +
+  theme_minimal() +
+  labs(y="Median willow height (cm)", x = "Year", caption = "Willow height at experimental sites")
+# ggsave("./output/median_willow_height_20191205_0924.png", width = 7, height = 5.5)
+
+## working on this...
+# summary.by.site2 %>%
+#   filter(contains(match = ""))
+#   filter(stat == "n_unique") %>% 
+#   ggplot(aes(variable,value)) +
+#   geom_point() +
+#   theme(axis.text.x = element_text(angle=45, hjust=1, face="bold", color="black", size=10)) +
+#   facet_wrap(~site2, ncol=4)
+
+##
+summary.by.site2 %>%
+  select(yr, treat, site2, skim_variable, contains("numeric")) %>% 
+  filter(!(site2 == "elk-dx" & yr == 2019)) %>% 
+  filter(skim_variable == "pl_ht_cm") %>% 
+  filter(treat != "obs") %>%  
+  ggplot(aes(yr, site2)) +
+  geom_tile(aes(fill = numeric.mean), color = 'gray70') +
+  scale_fill_viridis() +
+  theme_light() +
+  labs(x = "Year", y = "", subtitle = "Mean willow height", fill = "Height (cm)", caption = getwd())
+# ggsave("./output/median_willow_height_HM_20191205_0924.png", width = 7, height = 7)
+
+summary.by.site2 %>%
+  select(yr, treat, site2, skim_variable, contains("numeric")) %>% 
+  filter(!(site2 == "elk-dx" & yr == 2019)) %>% 
+  filter(skim_variable == "pl_ht_cm") %>% 
+  filter(treat != "obs") %>%  
+  ggplot(aes(yr, treat)) +
+  geom_tile(aes(fill = numeric.mean)) +
+  scale_fill_viridis() +
+  theme_light() +
+  facet_wrap(~site2) +
+  labs(x = "Year", y = "", subtitle = "Mean willow height", fill = "Height (cm)", caption = getwd())
+# ggsave("./output/median_willow_height_HM_20191205_0924.png", width = 7, height = 7)
+
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+### Using z-scores to evaluate unusual fall plant height values across years
+w_ht %>% 
+  filter(season=="fall") %>% 
+  group_by(willid) %>% 
+  mutate(cnt.group = n()) %>% 
+  mutate(z_score = scale(plantht)) %>% 
+  select(-c(exp,dam,browse,ID)) %>% 
+  datatable()
+
+```
+
+
+
+
+```{r, fig.height=34, fig.width=9, eval=FALSE, echo=FALSE}
+## Graphical evalaution
+
+### Heat map: count of observations by "willid" and "year" -- Spring
+
+w_ht %>% 
+  filter(season=="spring") %>% 
+  tabyl(willid, year) %>%
+  gather(key = year, value = cnt,-willid) %>% 
+  ggplot(aes(year, willid)) +
+  geom_tile(aes(fill=cnt), color="grey") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  # scale_fill_gradient2(low = "white", mid = "blue", high = "red", midpoint = 2, space = "Lab", na.value = "grey50", guide = "colourbar") +
+  # scale_fill_viridis() +
+  theme_bw() +
+  labs(title = "Count of Spring height measurements") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  theme(axis.text.y = element_text(face="bold", color="black", 
+                           size=6))
+
+```
+
+
+
+```{r, fig.height=34, fig.width=9, eval = FALSE, echo=FALSE}
+### Heat map: count of observations by "willid" and "year" -- Fall
+w_ht %>% 
+  filter(season=="fall") %>% 
+  tabyl(willid, year) %>%
+  gather(key = year, value = cnt,-willid) %>% 
+  ggplot(aes(year, willid)) +
+  geom_tile(aes(fill=cnt), color="grey") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  # scale_fill_gradient2(low = "white", mid = "blue", high = "red", midpoint = 2, space = "Lab", na.value = "grey50", guide = "colourbar") +
+  # scale_fill_viridis() +
+  theme_bw() +
+  labs(title = "Count of Fall height measurements") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  theme(axis.text.y = element_text(face="bold", color="black", 
+                           size=6))
+
+```
+
+
+
+
+```{r fig.height=12, fig.width=9, eval = FALSE, echo=FALSE}
+# boxplots of height and year
+w_ht %>% 
+  # group_by(site) %>%
+  # mutate(cnt.WatID = n()) %>%
+  # filter(Year>2000) %>%
+  # mutate(Year = as.character(Year)) %>%
+  # filter(str_detect(Wat_ID2, "E")) %>%
+  # filter(cnt.WatID > 3 & rellevel < 999) %>%
+  # ggplot(aes(Date,rellevel)) +
+  mutate(year = as.character(year)) %>% 
+  ggplot(aes(x=year,y=plantht, fill=season)) +
+  geom_boxplot(aes(fill=season)) +
+  # geom_jitter(width = 0.15, height = 0.15, aes(color=season)) +
+  # geom_point(color="darkblue", alpha=0.1,position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.2)) +
+  # geom_boxplot(aes(group=Year)) +
+  theme_minimal() +
+  # theme(legend.position = "none") +
+  facet_wrap(~site, ncol=6, scales = "free") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=7, angle=75, hjust = 1))
+
+```
+
+```{r, fig.height=10, fig.width=6, eval = FALSE, echo=FALSE}
+### boxplots of Spring height measurements
+w_ht %>% 
+  filter(season=="spring") %>% 
+  mutate(year = as.character(year)) %>% 
+  ggplot(aes(x=year,y=plantht)) +
+  geom_boxplot() +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Count of spring height measurements") +
+  facet_wrap(~site, ncol=5, scales = "free") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=9, angle=75, hjust = 1))
+
+
+```
+
+```{r,fig.height=10, fig.width=9, eval = FALSE, echo=FALSE}
+### boxplots of Fall height measurements
+w_ht %>% 
+  filter(season=="fall") %>% 
+  mutate(year = as.character(year)) %>% 
+  ggplot(aes(x=year,y=plantht)) +
+  geom_boxplot() +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Count of fall height measurements") +
+  facet_wrap(~site, ncol=5, scales = "free") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=9, angle=75, hjust = 1))
+
+```
+
+
+
+
+
+```{r, eval = FALSE}
+#### old
+## Import 2018 Data
+prod.path <- "data/raw/production/Exp_2018_Production_Height_20181220.xlsx"
+
+# the following seems to work for taking all of the tabs, importing them into a single tibble
+# B/c of parsing errors, everything is brought in as char, so need to type-fix.
+prod18.df <- prod.path %>% 
+  excel_sheets() %>% 
+  set_names() %>%
+  map(read_excel, path = prod.path, skip = 1, col_types = 'text') %>% 
+  map(clean_names) %>% 
+  map_df(.f = bind_rows, .id = "FNAME")
+
+# I could theoretically type set on import through the 'col_types' arg, BUT some of the tabs have 126 columns, some 127... Not sure which columns differ. A different puzzle to solve at some point :)
+
+```
+
+```{r, eval = FALSE, echo = FALSE}
+## Select subset and type cast
+prod18.df.sel <- prod18.df %>%
+  select(FNAME, site, plot, spp, wilid, pl_ht_cm, stid, live_status) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) 
+
+# filter out the na for ht
+prod18.df.sel <- prod18.df.sel %>% 
+  filter(!is.na(pl_ht_cm))
+
+```
+
+```{r, eval = FALSE, echo = FALSE}
+## calc ht summary. Mean and max should be the same
+prod18.df.sel.summary <- prod18.df.sel %>% 
+  group_by(site, plot, wilid) %>% 
+  summarise(totstems = n_distinct(stid), mean.pl.ht = mean(pl_ht_cm, na.rm = TRUE), max.pl.ht = max(pl_ht_cm)) %>% 
+  ungroup()
+
+## Note: "totstems" is named to match the same column in the Plant level fall current annual growth and height 
+
+```
+
+
+```{r, eval = FALSE, echo = FALSE}
+#### Issues to fix:
+# There should only be one height measurement for each wilid, but this isn't the case for 4/252 wilid. 
+
+## note that there are 4/252 rows with a diff...
+# will go with the max for now
+prod18.df.sel.summary %>%
+  mutate(diff = mean.pl.ht - max.pl.ht) %>% 
+  arrange(diff) %>% 
+  datatable()
+
+# The specific problem records:
+prod18.df.sel %>% 
+  filter(wilid == '744') # does matter for this record.
+
+prod18.df.sel %>% 
+  filter(wilid == '780') # does matter much for this record. Big difference between stid 785 and the other stid
+
+prod18.df.sel %>% 
+  filter(wilid == '293') # doesn't matter much for this record. 1 cm diff between the highest and lowerst stid. 
+
+prod18.df.sel %>% 
+  filter(wilid == '786') # doesn't matter much for this record. 70cm diff btn the highest and lowest stid
+
+
+```
+
+```{r, eval = FALSE, echo = FALSE}
+# rename for consistency with 2001-2017
+prod18.df.sel.summary <- prod18.df.sel.summary %>%
+  rename(willid = wilid) %>%
+  rename(plantht = max.pl.ht) %>% # note use of MAX height. See issue raised of the 4 willid above
+  select(-c(mean.pl.ht)) %>% 
+  mutate(year = "2018") %>% 
+  mutate(season = "fall")
+
+# prod18.df.sel.summary %>% 
+#   datatable()
+### 2017 colun names
+#      ID site   year season willid   exp   dam browse plantht
+#   <dbl> <chr> <dbl> <chr>   <dbl> <dbl> <dbl>  <dbl> <chr>  
+# 1   208 eb1    2001 fall      496     1     0      1 73     
+# 2   209 eb1    2001 fall      499     1     0      1 91     
+# 3   210 eb1    2001 fall      602     1     0      1 76     
+# 4   211 eb1    2001 fall      605     1     0      1 81     
+# 5   212 eb1    2001 fall      608     1     0      1 111
+
+```
+
+
+```{r, eval= FALSE}
+## plot the count of observations
+w_ht01_17 %>%
+  mutate(year = as.factor(year)) %>% 
+  group_by(season, year) %>% 
+  summarise(cnt = n()) %>% 
+  ggplot(aes(year, cnt)) + 
+  geom_bar(stat = 'identity', aes(fill = season), position = "dodge", color = "black") +
+  theme_bw()
+# There's only two years (01,17) with Spring measurements...
+```
+
+
+# Notes
+
+The metadata csv included in the DCC repository does not include all the variables.
+
+In the DCC data, “browse = 0” indicates experimental exclosure treatment. For example, see willid 1 in EB1. The plot type is listed in the 2018 dataset as “dx”. In the 2001-2017 data, it’s dam == 1, browse == 0
+
+In the supplemental material accompanying the 2013 Marshall et al. ProcRoySoc paper, the willid are attributed with “dammed” and “UNbrowsed”. This is confusing, since for “dam”, 1 is the experimental treatment, but for “browse”, 1 is the control.
+
+
+```{r, eval = FALSE, echo = FALSE}
+## keep only fall height measurements
+w_ht01_17 <- w_ht01_17 %>% 
+  filter(season == 'fall') 
+
+w_ht01_17 %>%
+  distinct(exp,dam, browse)
+# what does '2' denote for 'dam'?
+
+# w_ht01_17 %>% 
+#   datatable()
+
+## note that the "browse = 0" would seem to mean the experimental exclosure treatment.
+# for example, see willid 1 in EB1. The plot type is listed in the 2018 dataset as "dx". In the 2001-2017 data, it's dam == 1, browse == 0
+# In the supplemental material accompanying the 2013 Marshall et al. ProcRoySoc paper, the willid are are attributes with "dammed" and "UNbrowsed". 
+
+# This is confusing, since for "dam", 1 is the experimental treatment, but for "browse", 1 is the control. 
+
+# proceeding from the above...
+w_ht01_17 <- w_ht01_17 %>% 
+  mutate(plot = case_when(dam == 0 & browse == 0 ~ "cx",
+                           dam == 1 & browse == 0 ~ "dx",
+                           dam == 0 & browse == 1 ~ "cc",
+                           dam == 1 & browse == 1 ~ "dc",
+                           TRUE ~ "obs"
+                           ))
+
+```
+
+```{r, eval = FALSE, echo = FALSE}
+## QA/QC: ID cases where there are multiple records for willid-season-yr combinations
+w_ht01_17 %>% 
+  group_by(site, year, willid, season) %>% 
+  mutate(cnt.rec = n()) %>% 
+  ungroup() %>% 
+  filter(cnt.rec != 1) %>% 
+  arrange(desc(willid)) %>% 
+  datatable(caption = "Willid with >1 observation for willid-year-season combination. Something is in error here...")
+
+```
+
+```{r, eval = FALSE, echo = FALSE}
+# Combine the 2001-2017 to 2018 data
+
+## need to type convert some columns first...
+w_ht01_17 <- w_ht01_17 %>% 
+  select(-c(ID,exp, dam, browse)) %>% 
+  mutate(plantht = readr::parse_number(plantht)) %>% 
+  mutate(willid = as.character(willid)) %>% 
+  mutate(year = as.integer(year))
+
+# w_ht01_17 %>% 
+#   glimpse
+
+## type convert 2018
+prod18.df.sel.summary <- prod18.df.sel.summary %>%
+  select(-totstems) %>% 
+  mutate(year = as.integer(year))
+
+# prod18.df.sel.summary %>% 
+#   glimpse
+
+# do the combining...
+willowht.01_18 <- bind_rows(w_ht01_17,prod18.df.sel.summary) %>% 
+  filter(plot != 'obs') # there are only obs records for 2015 and for elk5 and crystal. Dropping these. 
+
+
+```
+
+
+
+```{r, eval = FALSE, echo = FALSE}
+# ### Outlier analysis
+# 
+# There are some problematic records...
+## lets do some ggrepel
+# ??ggrepel
+willowht.01_18 %>%
+  group_by(willid) %>%
+  mutate(std.ht = sd(plantht, na.rm = TRUE)) %>% 
+  mutate(mn.ht = mean(plantht,na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(zVal = abs((mn.ht - plantht)/std.ht)) %>% 
+  mutate(outlier = ifelse(zVal > 2.5, willid, as.numeric(NA))) %>% 
+  mutate(year = as.character(year)) %>% 
+  ggplot(aes(year,plantht)) +
+  geom_boxplot(aes(fill = plot)) +
+  # geom_text(aes(label = outlier), na.rm=TRUE, hjust = -.3) +
+  geom_text_repel(aes(label = outlier), na.rm=TRUE, hjust = -.3) +
+  labs(title = "Fall Willow Height", x= "Year", y = "Height (cm)")
+
+willowht.01_18 %>%
+  group_by(willid) %>%
+  mutate(std.ht = sd(plantht, na.rm = TRUE)) %>% 
+  mutate(mn.ht = mean(plantht,na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(zVal = abs((mn.ht - plantht)/std.ht)) %>% 
+  mutate(outlier = ifelse(zVal > 2.5, willid, as.numeric(NA))) %>% 
+  mutate(year = as.character(year)) %>% 
+  ggplot(aes(year,plantht)) +
+  geom_boxplot(aes(fill = plot)) +
+  # geom_text(aes(label = outlier), na.rm=TRUE, hjust = -.3) +
+  geom_label_repel(aes(label = outlier), na.rm=TRUE, hjust = -.3) +
+  labs(title = "Fall Willow Height - Outlier analysis", subtitle = "The 'willid' of observations >2.5 sd away from the group (willid) mean are labeled", y = "Height (cm)")
+
+
+
+```
+
+```{r, eval = FALSE, echo = FALSE}
+willowht.01_18 %>%
+  group_by(willid) %>%
+  mutate(std.ht = sd(plantht, na.rm = TRUE)) %>% 
+  mutate(mn.ht = mean(plantht,na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(zVal = abs((mn.ht - plantht)/std.ht)) %>% 
+  mutate(outlier = ifelse(zVal > 3, willid, as.numeric(NA))) %>%
+  filter(!is.na(outlier))
+```
+
+
+
+```{r, eval = FALSE, echo = FALSE}
+
+### Culling the outliers 
+
+willowht.01_18.rmOutlier <- willowht.01_18 %>%
+  group_by(year, site) %>%
+  mutate(std.ht = sd(plantht, na.rm = TRUE)) %>% 
+  mutate(mn.ht = mean(plantht,na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(zVal = abs((mn.ht - plantht)/std.ht)) %>% 
+  mutate(outlier = ifelse(zVal > 2.5, willid, as.numeric(NA))) %>%
+  filter(is.na(outlier))
+
+
+willowht.01_18.rmOutlier %>% 
+  mutate(year = as.factor(year)) %>% 
+  ggplot(aes(year,plantht)) +
+  geom_boxplot(fill='ivory') +
+  geom_jitter(color='blue', alpha = .05) +
+  geom_hline(yintercept = 200, color = 'red', lty = 'dashed') +
+  labs(title = "Fall Willow Height - 2001-2018", x = "Year", y = "Height (cm)") +
+  facet_wrap(~plot, ncol = 2) +
+  # scale_color_viridis(discrete = TRUE) +
+  theme_minimal() +
+  theme(legend.position="none") +
+  theme(axis.text.x = element_text(angle = 40, hjust = 1))
+ggsave("fallHt01to18.png",dpi = 300, width = 7, height = 5.5)
+
+willowht.01_18.rmOutlier %>% 
+  mutate(year = as.factor(year)) %>% 
+  ggplot(aes(year,plantht)) +
+  geom_boxplot(fill='ivory') +
+  geom_jitter(color='blue', alpha = .05) +
+  geom_hline(yintercept = 200, color = 'red', lty = 'dashed') +
+  labs(title = "Fall Willow Height - 2001-2018", x = "Year", y = "Height (cm)") +
+  facet_wrap(~plot, ncol = 2) +
+  # scale_color_viridis(discrete = TRUE) +
+  theme_minimal() +
+  theme(legend.position="none") +
+  theme(axis.text.x = element_text(angle = 40, hjust = 1))
+ggsave("fallHt01to18.png",dpi = 300, width = 7, height = 5.5)
+
+```
+
+
+
+```{r, echo = FALSE, eval = FALSE}
+## Plots
+willowht.01_18.rmOutlier %>% 
+  mutate(year = as.character(year)) %>% 
+  ggplot(aes(year,plantht)) +
+  geom_boxplot(aes(fill = plot)) +
+  geom_hline(yintercept = 200, color = "red", lty = 'dashed', size = 1.72) +
+  labs(title = "Fall Willow Height - 2001-2018", x= "Year", y = "Height (cm)") +
+  theme_minimal()
+
+
+```
+
+
+```{r, echo = FALSE, eval = FALSE}
+willowht.01_18.rmOutlier %>% 
+  # mutate(year = as.character(year)) %>% 
+  ggplot(aes(year,plantht)) +
+  geom_jitter(alpha = .05) +
+  geom_smooth(aes(color = plot)) + 
+  # geom_boxplot(aes(fill = plot)) +
+  geom_hline(yintercept = 200, color = "red", lty = 'dashed', size = 1.72) +
+  labs(title = "Fall Willow Height - 2001-2018", subtitle = "Smooth lines using method = 'gam' and formula y ~ s(x, bs = cs)", x= "Year", y = "Height (cm)") +
+  theme_minimal()
+```
+
+```{r, echo = FALSE, eval = FALSE}
+## Write export file to disk
+# export to disk
+write_csv(x = willowht.01_18.rmOutlier, path =  "output/datasets/willowht_FallExp_2001_2018_20190102.csv")
+# note that this file still has the issue of multiple records that needs to be addressed.
+
+
+```
+
