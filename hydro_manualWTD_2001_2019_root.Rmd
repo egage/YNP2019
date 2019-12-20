@@ -4,6 +4,8 @@ output:
   html_document: 
     theme: journal
     toc: yes
+    toc_depth: 2
+    toc_float: true
   word_document: default
 ---
 
@@ -70,18 +72,40 @@ library(gt)
 
 ## Data Import and Initial Processing
 
-### 2001-2014 (DCC Collection)
+### Lookup tables
+```{r}
+# lookup
+
+## bv occ
+lu_site_beav <- read_csv("./data/lu_site_site2_beav.csv")
+
+
+### try to add spp info to the 18 and 19 
+
+## change ref system to start with lu
+lu.wilid.spp.v2 <- read_csv("./data/wilid_spp._lu_v2.csv") %>% 
+  select(c(species, wilid_full)) %>% 
+  distinct()
+
+lu.plot <- read_csv("./data/plot_lookup_master.csv",col_types = "ccccc")
+
+
+
+
+```
+
+
+### 2001-2015 (DCC Collection)
 
 ```{r, message=FALSE, warning=FALSE}
 wt.nsf <- read_tsv("data/NSF_DataArchive20180208/Well_measurement_data2001-2015/Yell_Well_Data_Manual2001_2015.txt")
 
 wt.nsf.meta <- read_csv("data/NSF_DataArchive20180208/Well_measurement_data2001-2015/Yell_Well_Data_Manual2001_2015_METADATA.csv")
+
 wt.nsf.meta <- wt.nsf.meta %>% 
   rename(desc = Site_1)
 
 ```
-
-
 
 ```{r, warning=FALSE}
 # **Field names from metadata file on DCC repository site**
@@ -269,8 +293,6 @@ wt.nsf %>%
 ```
 
 
-
-
 ```{r, eval=FALSE}
 #### Data cleaning
 # **Task: Make encoding of Site2 consistent**
@@ -319,26 +341,6 @@ site.lu <- site.lu %>%
 
 
 ```{r}
-
-# wt.nsf %>% 
-#   mutate(Site2 = case_when(Site2 == "eb1" ~ "EB1",
-#                            Site2 == "eb2" ~ "EB2",
-#                            Site2 == "EB2CC" ~ "EB2",
-#                            Site2 == "EB2CX" ~ "EB2",
-#                            Site2 == "EB2DC" ~ "EB2",
-#                            Site2 == "EB2DX" ~ "EB2",
-#                            Site2 == "ElkCC" ~ "Elk",
-#                            Site2 == "ElkCX" ~ "Elk",
-#                            Site2 == "ElkDC" ~ "Elk",
-#                            Site2 == "ElkDX" ~ "Elk",
-#                            Site2 == "ElkNA" ~ "Elk",
-#                            Site2 == "WBCC" ~ "WB",
-#                            Site2 == "WBCx" ~ "WB",
-#                            Site2 == "WBDC" ~ "WB",
-#                            Site2 == "WBDX" ~ "WB",
-#                            Site2 == "WBNA" ~ "WB",
-#                            TRUE ~ as.character(Site2)))
-
 
 # recode the "Site2"
 wt.nsf <- wt.nsf %>% 
@@ -511,6 +513,18 @@ wt.nsf <- wt.nsf %>%
 
 
 ```
+
+
+```{r}
+#### filter out sg
+wt.nsf %>% 
+  tabyl(wat_type)
+
+wt.nsf <- wt.nsf %>%
+  filter(wat_type == 1)
+
+```
+
 
 ### 2015-2017 Data
 
@@ -860,7 +874,10 @@ w16c %>%
 
 ```
 
+
+
 ```{r}
+#### Eliminate sg
 # There might be a few SG to remove...
 w16c %>% 
   filter(str_detect(well_id, "^S")) %>% 
@@ -904,6 +921,8 @@ w16c %>%
   datatable(caption = "Records with 'NA' for 'rwte' after previous filtering steps.",
             filter = list(position = 'top', clear = FALSE))
 
+w16c %>% 
+  filter(well_sg == "well")
 
 ```
 
@@ -934,9 +953,19 @@ w16c %>%
   datatable(rownames = FALSE, caption = "Duplicate fullID/date combinations. There should only be one, right?")
 
 ## I think this has to do with duplication between the two source files. Lets find distinct rows...
+
+
+```
+
+```{r}
 w16c <- w16c %>%
   select(well_sg, wid, site, well_id, fullID, rwte, su, dtw, date) %>% 
   distinct() 
+
+
+## select just wells
+w16c <- w16c %>% 
+  filter(well_sg != "sg")
 
 ## this still leaves 14 duplicates
 w16c %>%
@@ -1084,7 +1113,9 @@ sel.01.17 <- sel.01.17 %>%
 ## Import 2018 and 2019 data
 ## read in data from Lewis
 
-w18_19 <- readxl::read_xlsx("data/raw/well_data_manual/2018_WTD/manual_well_readings_2018_2019.xlsx") 
+# w18_19 <- readxl::read_xlsx("data/raw/well_data_manual/2018_WTD/manual_well_readings_2018_2019.xlsx") 
+
+w18_19 <- readxl::read_xlsx("./data/raw/well_data_manual/manual_well_readings2018_2019_LM_20191204.xlsx")
 
 # clean names
 w18_19 <- w18_19 %>% 
@@ -1114,12 +1145,41 @@ w18_19 <- w18_19 %>%
 w18_19 <- w18_19 %>% 
   mutate(rwte = (dtw_cm - su_cm)*-1) 
 
-#
-w18_19 <- w18_19 %>% 
-  mutate(plot = replace_na(plot, "obs")) %>%
+# CHECK THIS SITE CONFUSION
+w18_19 <- w18_19 %>%
+  mutate(plot = case_when(site == "rose" ~ "obs",
+                          site == "lb1" ~ "obs",
+                          site == "elk1" ~ "obs",
+                          TRUE ~ "FLAG"))
+# eb2 as FLAG. Confirm is obs
+  # mutate(plot = replace_na(plot, "obs")) 
+
+w18_19 <- w18_19 %>%
   mutate(site2 = paste0(site,"-", plot)) %>% 
   mutate(fullid = paste0(site2,"-",wid))
-  
+
+## filter sg
+w18_19 <- w18_19 %>%
+  mutate(well_sg = case_when(is.na(well_sg) & well_1_sg_0 == "11" ~ "well",                             TRUE~"sg"))
+
+w18_19 %>%   filter(is.na(well_sg))
+w18_19 %>%   distinct(well_sg)
+
+
+
+
+```
+
+```{r}
+## filter staff gages
+w18_19 <- w18_19 %>% 
+  filter(well_sg == "well")
+
+w18_19 %>% 
+  visdat::vis_dat()
+```
+
+```{r}
 ## select
 sel.18.19 <- w18_19 %>%
   # filter(well_sg == "well") %>%
@@ -1131,17 +1191,26 @@ sel.18.19 <- w18_19 %>%
 sel.18.19 <- sel.18.19 %>% 
   filter(!is.na(wid))
 
+sel.18.19 %>% visdat::vis_dat()
+
 ```
 
 ```{r}
 ### merge in the 18 and 19 data
 sel.01.17 %>%
   glimpse()
+sel.01.17 %>% visdat::vis_dat()
 
 sel.18.19 %>%
   glimpse()
 
+```
+
+### Combine all years
+
+```{r}
 sel.01.19 <- bind_rows(sel.01.17, sel.18.19)
+sel.01.19 %>% visdat::vis_dat()
 
 ```
 
@@ -1157,6 +1226,7 @@ sel.01.19 %>%
 #   filter(plot_type %in% c("wbna", "eb1na","elkna")) %>% 
 #   gt()
 
+# confirm you want this
 sel.01.19 <- sel.01.19 %>%
   filter(plot_type %in% c("cc", "cx","dc","dx","obs"))
 
@@ -1168,12 +1238,13 @@ sel.01.19 <- sel.01.19 %>%
   mutate(yr = lubridate::year(date)) %>% 
   mutate(doy = lubridate::yday(date)) %>% 
   mutate(mday = lubridate::mday(date)) %>%
-  mutate(mo = lubridate::month(date)) 
+  mutate(mo = lubridate::month(date,label = TRUE)) 
 
 ## some filtering...
 sel.01.19 <- sel.01.19 %>% 
   filter(yr != 1900) %>% 
-  filter(!is.na(site)) 
+  filter(!is.na(site)) %>% 
+  filter(!is.na(rwte))
 
 ```
 
@@ -1182,12 +1253,12 @@ sel.01.19 <- sel.01.19 %>%
 sel.01.19 <- sel.01.19 %>%
   filter(!is.na(wid)) %>% 
   group_by(fullid, yr) %>% 
-  mutate(n = n()) %>% 
+  mutate(n_by_fullid_yr = n()) %>% 
   ungroup()
 
 ## select multiple years
 sel.01.19 <- sel.01.19 %>% 
-  filter(n>1) %>% 
+  filter(n_by_fullid_yr>1) %>% 
   filter(!is.na(rwte)) 
 
 ## create file for qa qc
@@ -1211,25 +1282,244 @@ sel.01.19 <- sel.01.19 %>%
 # ggsave("./output/figures/sel_01_19_cnt_tile.png", dpi = 220, height = 49, width = 7.5)
 
 ## cross tab of observations by year and unique fullid
-xtab <- sel.01.19 %>% 
-  tabyl(fullid, yr) %>% 
-  # names()
-  dplyr::arrange(fullid)
+# xtab <- sel.01.19 %>% 
+#   tabyl(fullid, yr) %>% 
+#   # names()
+#   dplyr::arrange(fullid)
 # write.csv(xtab,"man_01_19_check.csv")
 
+```
+
+```{r}
+# make changes to match willow conventions
+sel.01.19 <- sel.01.19 %>% 
+  rename(site2 = site) %>% 
+  separate(data = ., col = site2,into = c("site","trt"),remove = FALSE) %>% 
+  select(-"trt")
+
+```
+
+
+```{r}
+#### EB2 2015 wierdness
+# sel.01.19 %>%
+#   # distinct(yr)
+#   filter(site == "eb2" & yr == 2015) %>% 
+#   View()
+
+## filter out
+sel.01.19 <- sel.01.19 <- sel.01.19 %>%
+  filter(!(site == "eb2" & wid == '200' & yr == 2015)) 
+
+
+## two records way above range. SG?
 
 
 ```
+
+```{r}
+sel.01.19 <- sel.01.19 %>% 
+  mutate(site = case_when(site == "elk1" & site != "obs" ~ "elk",
+                                site == "wb1"  & site != "obs" ~ "wb",
+                          TRUE ~ site)) %>% 
+  rename(plot = plot_type)
+
+
+```
+
+### Summarize to site and year
+
+
+```{r}
+# creat4e periods to summarize from
+sel.01.19 <- sel.01.19 %>%
+  mutate(period = case_when(
+    mo == "Jul" | mo == "Aug" | mo == "Sep" ~ "late_summer",
+    mo == "May" | mo == "Jun" ~ "early_summer",
+    TRUE ~ "all_months"))
+```
+
+```{r}
+## more cleaning!
+sel.01.19 <- sel.01.19 %>% 
+  mutate(site = case_when(
+    site == "xtal1" ~ "crystal",
+    site == "lostck" ~ "lostc",
+    site == "lostcr" ~ "lostc",
+    site == "lostlk" ~ "lostl",
+    TRUE ~ site)) %>% 
+    mutate(site2 = paste0(site,"-",plot))
+
+# sel.01.19 %>% distinct(site) %>% View()
+
+```
+
+
+```{r}
+
+sel.01.19.summary <- sel.01.19 %>%
+  group_by(site, plot, site2,yr, period) %>% 
+  summarise(rwte_mean = mean(rwte, na.rm = TRUE), rwte_sd = sd(rwte, na.rm = TRUE)) %>% 
+  pivot_wider(names_from = period, values_from = c(rwte_mean, rwte_sd)) %>% 
+  ungroup()
+
+# sel.01.19.summary %>% 
+#   names()
+```
+
+```{r}
+sel.01.19.summary %>%
+  filter(plot != "obs") %>% 
+  ggplot(aes(yr,rwte_mean_late_summer)) +
+  geom_point(aes(color = plot)) +
+  geom_line(aes(color = plot)) +
+  # geom_smooth(aes(color = plot)) +
+  geom_hline(yintercept = 0, color = "gray70", lty = "dashed") +
+  facet_wrap(~site) +
+  labs(caption = "Relative water table elevation, experiment sites", x = "year", y = "Relative water table depth (cm)") +
+  scale_color_viridis(discrete = TRUE) +
+  theme_minimal()
+  
+# sel.01.19.summary %>% 
+#   filter(rwte_mean_late_summer >0)
+
+bp1 <- sel.01.19 %>%
+  mutate(yr = as.character(yr)) %>% 
+  filter(plot != "obs") %>% 
+  ggplot(aes(yr, rwte)) +
+  geom_boxplot(aes(fill = plot), color = "black", alpha = .5) +
+  facet_wrap(~site) +
+  theme_minimal() +
+  labs(caption = "late summer rwte")
+bp1
+
+```
+
+### Bring in plot and site info
+```{r}
+# 
+# lu_site_beav
+
+sel.01.19.summary <- sel.01.19.summary %>% 
+  # distinct(site, plot) %>% 
+  left_join(., lu.plot) %>% 
+  select(-treat) %>% 
+  left_join(.,lu_site_beav)
+
+sel.01.19.summary %>% visdat::vis_dat()
+
+# sel.01.19.summary %>%
+#   filter(is.na(beav19)) %>%
+#   View
+
+# sel.01.19.summary %>% 
+#   filter(is.na(site2)) %>% 
+#   View()
+
+```
+
 
 ### Export
 
-```{r, eval= FALSE}
+#### Raw
+```{r}
+sel.01.19 <- sel.01.19 %>%
+  select(-c(site_general, well_id)) %>% 
+  distinct()
 
-sel.01.19 %>% 
-  select(-n) %>% 
-  write_csv("./output/manual_WTD_2001-2019_20191203.csv")
+# sel.01.19 %>% 
+#   write_csv("./data/processed/manual_well_data_raw_20191220.csv")
   
 ```
+
+#### Summarized
+
+
+```{r, eval= FALSE}
+
+sel.01.19.summary %>%
+  write_csv("./output/processed_data/manual_WTD_site_mean_20191214_0839.csv")
+
+```
+
+
+
+## Sandbox: nested workflow
+
+
+```{r, sel_nest, eval = FALSE}
+#### NEST
+### return here
+
+sel.01.19.nest_site <- sel.01.19 %>%
+  rename(plot = plot_type) %>% 
+  group_by(site, plot) %>% 
+  nest() 
+
+sel.01.19.nest_site %>% 
+  mutate(vd = map(.x = data,.f = visdat::vis_dat))
+
+ggSite <- function(data){
+  data %>% 
+    ggplot(aes(doy, rwte)) +
+    geom_line(aes(color = plot))
+  }
+
+sel.01.19.nest_site %>% 
+  mutate(ggp = map(.x = data, .f = ggSite)) %>% 
+  pluck(4) %>% 
+  pluck(3)
+
+# map2(paste0(plots$country, ".pdf"), plots$plot, ggsave)
+
+```
+
+
+
+## Notes
+
+DCC data re adjusted rwte values, no su or dtw_cm values.
+
+
+**LM notes 2012-12-04**
+
+eb2 UM – Well showed up in 2017 without label in the field. Changed all labels to well 100 for
+2018 and 2019 for UM and 99 with stick up of ~64 cm in eb2 dx.
+lb6 SIU1 600 – Changed to 600 based on GIS and previous notes.
+oxbow 212/214/215 – Changed staff gauge label to 212. GIS discrepancy showed labels 214
+and 215 which were different from the field label 212. Staff gauge was labeled 212 in previous
+years.
+wb2 NA – Changed to 211 to match GPS location.
+wb2 21b – Changed well ID to 211 and site to wb2. This is the upland well labeled in field as
+21/211 which does not correspond to the GPS locations for the well labeled 21.
+wb1 NA – Changed to wb2 and 211 to match well stick up and GPS locations
+elk4 NA – Changed staff gauge “NA” label to staff gauge 221.
+lb6 STU1600 – Changed staff gauge to 600. Only one well had 600 in the label (STU1600
+on well, and 600 in GIS).
+crystal NA – changed wells labeled as NA as 399. Stick up and locations were identical. All
+were in new plots set up in 2018.
+crystal sg – Changed unmarked staff gauges as 999. No label present in the field or location
+recorded in GIS data.
+wb1 21a – Change well ID to 21 and site to wb2 to match GPS data.
+wb1 21b – Changed well ID to 211 and site to wb2. This is the upland well labeled in field as
+21/211 which does not correspond to the GPS locations for the well labeled 21.
+lb2 SG – changed staff gauge 209 and SG to 208. Staff gauge was not labeled in the field
+and GIS had both labels 208 and 209. Staff gauge 208 was present in earlier years (since 2008)
+and there was only one staff gauge present at the site for all years.
+lb6 SG Changed to 651. New staff gauge in 2018.
+wb1 21/211 – Changed site label to wb2 and well label to 211. Upland well always dry and
+labeled 21/211 in the field. Label 21 or 211 does not correspond with the site or GIS positions
+so must be differentiated from well 21 located at wb2.
+oxbow 108/8 – Changed staff gauge label to 108. GIS discrepancy showed label 108 which was
+different from the field label 8. Staff gauge was labeled 108 in previous years.
+oxbow 105/5 – Changed staff gauge label to 105. GIS discrepancy showed label 105 which was
+different from the field label 5. Staff gauge was labeled 105 in previous years.
+crystal NA – Changed well NAs to 399. All were in identical locations and had similar stick ups.
+All located in plots set up in 2018.
+hailbuff175/75 – Changed well label 175/75 to 75. Changed hailbuff to hailbuf.
+elk NA – Inconclusive.
+lb5 39119 – Changed to 5002. Staff gauge added in 2018 and was not labeled in the field.
+eb1 127/27 – Changed to 127. Label was tough to see in the field and 127 lines up with GIS.
 
 
 ## WORKING bin 
