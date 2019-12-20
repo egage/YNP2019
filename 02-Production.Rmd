@@ -1,5 +1,5 @@
 ---
-title: "Production and Willow Height Data - Data Processing Report"
+title: "Willow Height Data - Data Processing Report"
 output:
   html_document: 
     theme: journal
@@ -68,6 +68,7 @@ library(gt)
 
 Data are in seprate directories and files
 * Experimental  
+
 ```{r}
 #2001-2015 prod
 list.files <- fs::dir_ls("data/raw/production/2001_2015",recursive = TRUE, glob = "*.csv")

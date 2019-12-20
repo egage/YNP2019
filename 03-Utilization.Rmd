@@ -33,12 +33,9 @@ Data are cleaned to produce files for further analyses.
 
 ```{r,echo=FALSE}
 # library(here)
-# here()
-# install.packages("bindrcpp")
 suppressPackageStartupMessages(library(tidyverse))
 library(fs)
 suppressPackageStartupMessages(library(sf))
-# library(raster)
 suppressPackageStartupMessages(library(janitor))
 suppressPackageStartupMessages(library(readxl))
 # library(glue)
@@ -52,7 +49,7 @@ suppressPackageStartupMessages(library(kableExtra))
 suppressPackageStartupMessages(library(lubridate))
 library(anytime)
 suppressPackageStartupMessages(library(compare))
-suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(skimr)) 
 suppressPackageStartupMessages(library(dataMaid))
 
 ```
