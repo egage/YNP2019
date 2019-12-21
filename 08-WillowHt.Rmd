@@ -26,21 +26,11 @@ opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'cente
 
 # Introduction  
 
-This document evaluates willow height measurement data from project inception through 2019. Data include those archived on the "Digital Collections of Colorado" (DCC) library site and more recent (2015-2019) data. These analyses are aimed at identifying potential issues such as:
-
-* Inconsistently named factors such as site name or well ID    
-* Missing values  
-* Data values outside of expected range or showing unusual patterns
+This document evaluates willow height measurement data from project inception through 2019. Data include those archived on the "Digital Collections of Colorado" (DCC) library site and more recent (2015-2019) data. 
 
 DCC links:  
 Plant level fall current annual growth and height on experimental plots in Yellowstone's Northern Range, 2002 - 2015: http://hdl.handle.net/10217/173649  
 Plant level fall current annual growth and height on observation plots in Yellowstone's Northern Range, 2008 - 2015: http://hdl.handle.net/10217/173657
-
-__Associated Publications:__
-Marshall Kristin N., N. Thomson Hobbs and David J. Cooper. Stream Hydrology Limits Recovery of Riparian Ecosystems After Wolf Reintroduction. Proceedings of the Royal Society. B 280, issue 1756 (April 7, 2013): 20122977. http://dx.doi.org/10.1098/rspb.2012.2977
-
-Marshall, Kristin N., David J. Cooper, N. Thompson Hobbs. Interactions Among Herbivory, Climate, Topography and Plant Age Shape Riparian Willow Dynamics in Northern Yellowstone National Park, USA. Journal of Ecology 102, issue 3 (May 2014): 667-677. http://dx.doi.org/10.1111/1365-2745.12225
-
 
 ```{r,echo=FALSE}
 suppressPackageStartupMessages(library(tidyverse))
@@ -70,7 +60,6 @@ library(gt)
 ## Functions
 ```{r, functs}
 
-##### Function to read in sheets and tabs
 read_sheets <- function(file){
   xlsx_file <- file
   xlsx_file %>%
@@ -91,6 +80,18 @@ read_sheets_prod <- function(file){
     mutate(file_name = file) %>% 
     select(file_name, sheet_name, everything())
 }
+
+read_sheets_prod18 <- function(file){
+  xlsx_file <- file
+  xlsx_file %>%
+    excel_sheets() %>%
+    set_names() %>%
+    # map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:Dw136") %>%
+    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text") %>%
+    mutate(file_name = file) %>% 
+    select(file_name, sheet_name, everything())
+}
+
 
 read_sheets_util <- function(file){
   xlsx_file <- file
@@ -134,7 +135,6 @@ ggTile_yr_season_site <- function(df){
   ggplot(aes(yr, site)) +
   geom_tile(aes(fill = n), color = 'white') +
   viridis::scale_fill_viridis(option = "D") +
-  facet_wrap(~season) +
   theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 7)) +
   theme(axis.text.y = element_text(size = 7)) +
   facet_wrap(~season)} 
@@ -148,10 +148,84 @@ ggTile_yr_season_plot <- function(df){
   geom_tile(aes(fill = n), color = 'white') +
   viridis::scale_fill_viridis(option = "B") +
   facet_wrap(~season) +
-  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 7)) +
-  theme(axis.text.y = element_text(size = 7)) +
+  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 9)) +
+  theme(axis.text.y = element_text(size = 8)) +
   facet_wrap(yr~season)
   } 
+#
+##
+ggTile_yr_season_plot_alt1 <- function(df){
+  df %>%
+  group_by(yr, plot, season, site) %>%
+  summarise(n= n()) %>%
+  ggplot(aes(yr, site)) +
+  geom_tile(aes(fill = n), color = 'white') +
+  viridis::scale_fill_viridis(option = "A") +
+  # facet_wrap(~season) +
+  facet_grid(season~plot) +
+  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 9)) +
+  theme(axis.text.y = element_text(size = 8))
+} 
+
+### ggpoint
+ggPoint_yr_site_season_plot <- function(df){
+  df %>%
+  ggplot(aes(yr, pl_ht_cm)) +
+    geom_point(aes(color = plot, shape = plot)) +
+    facet_wrap(~site, ncol = 4) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 9)) +
+  theme(axis.text.y = element_text(size = 8)) +
+    viridis::scale_color_viridis(discrete = TRUE, option = "C") +
+    labs(y = "Height (cm)")
+} 
+
+
+### ggqc
+
+### gt table summary
+tbqc_exp <- function(df){
+  df %>%
+    filter(plot != "obs") %>% 
+    group_by(site,yr, season, plot) %>% 
+    summarise(n = count(), ht_mean = mean(pl_ht_cm, na.rm = TRUE), ht_sd = sd(pl_ht_cm, na.rm = TRUE)) %>% 
+    gt()
+}
+
+tbqc_obs <- function(df){
+  df %>%
+    filter(plot == "obs") %>% 
+    group_by(site,yr, season, plot) %>% 
+    summarise(n = count(), ht_mean = mean(pl_ht_cm, na.rm = TRUE), ht_sd = sd(pl_ht_cm, na.rm = TRUE)) %>% 
+    gt()
+}
+
+### Table funcs
+gt_tally_site_plot_yr_season <- function(df){
+  df %>%
+  group_by(yr, plot, season, site) %>%
+  tally() %>%
+    gt::gt() %>% 
+    tab_header(title = "tally")
+} 
+
+
+
+```
+
+### Table functions
+```{r}
+## gt field names
+names.gt <- function(df){
+  df %>% 
+  names() %>% enframe %>% gt::gt() %>% 
+    tab_header(title = "field names")
+}
+
+names.dt <- function(df){
+  df %>% 
+  names() %>% enframe %>% 
+    DT::datatable(caption = "field names")
+}
 
 ```
 
@@ -287,20 +361,19 @@ nsf.ht.spr %>%
 
 ```{r}
 
-nsf.ht.spr %>%
-  mutate(site2 = paste0(site,"-",plot)) %>% 
-  group_by(site2, yr) %>% 
-  tally() %>% 
-  ungroup() %>% 
-  ggplot(aes(yr, site2)) +
-  geom_tile(aes(fill = n)) +
-  labs(title = "combined obs and exp files from DCC")
-  
+# nsf.ht.spr %>%
+#   mutate(site2 = paste0(site,"-",plot)) %>% 
+#   group_by(site2, yr) %>% 
+#   tally() %>% 
+#   ungroup() %>% 
+#   ggplot(aes(yr, site2)) +
+#   geom_tile(aes(fill = n)) +
+#   labs(title = "Spring DCC combined obs and exp files", caption = "nsf.ht.spr")
 
 ```
 
 
-### Fa raw DCC
+### Raw DCC fall
 
 ```{r}
 ## Fa raw DCC
@@ -407,9 +480,9 @@ dcc.ht.fa.spr %>%
 
 ```
 
+```{r}
 ### w_ht issue
 
-```{r}
 w_ht <- w_ht %>%
   filter(pl_ht_cm != "na" & pl_ht_cm != "missing" & pl_ht_cm != "NA") %>% 
   mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
@@ -456,6 +529,129 @@ w_ht %>%
 
 ```
 
+
+### Data files from Tom 
+
+WillowHt_2001_2015.csv
+
+```{r}
+
+th.01.15 <- read_csv("./data/Yell_data_from_Hobbs_drive/Master data file/WillowHt_2001_2015.csv")
+
+th.01.15 <- th.01.15 %>%
+  mutate(plot = case_when(dam == 0 & browse == 0 ~ "cx",
+                           dam == 1 & browse == 0 ~ "dx",
+                           dam == 0 & browse == 1 ~ "cc",
+                           dam == 1 & browse == 1 ~ "dc",
+                           TRUE ~ "obs"
+                           )) %>% 
+  select(-c(ID,exp,dam,browse)) %>% 
+  rename(yr = year) %>% 
+  mutate(yr = as.character(yr)) %>% 
+  rename(wilid = willid) %>% 
+  rename(pl_ht_cm = plantht)
+
+```
+
+```{r}
+th.01.15 %>% 
+  ggTile_yr_season_site() +
+  labs(title = "2001-2015 data from TH file", caption = "WillowHt_2001_2015.csv")
+
+```
+
+No spring data here, except for 2001. 
+
+### Ht from sprcag*.csv files
+
+```{r}
+## see if there is data in the sprcag*.csv files
+# updated as of 20191203
+files_util_01_15 <- fs::dir_ls("./data/Yell_data_from_Hobbs_drive/Utilization all years", recurse = FALSE, glob = "*.csv")
+
+sprcag.files <- enframe(files_util_01_15) %>%
+  rename(path = name) %>% 
+  select(-value) %>%
+  separate(data = ., col = path, into = c("f1","f2","f3","f4","sprcag_file"), sep = "/", remove = FALSE) %>% 
+  select(-starts_with("f"))
+
+sprcag.files %>% 
+  gt()
+
+sprcag.files <- files_util_01_15 %>%
+  map_df(~read_csv(., col_types = cols(.default = "c")))
+
+sprcag.files.ht <- sprcag.files %>%
+  mutate(season = "spring") %>% 
+  rename(wilid = willid) %>% 
+  rename(yr = year) %>% 
+  rename(pl_ht_cm = plantht) %>% 
+  select(yr,season, site,plot,wilid,pl_ht_cm) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>%
+  filter(!is.na(pl_ht_cm)) %>% 
+  distinct()
+
+sprcag.files.ht %>% 
+  visdat::vis_dat()
+
+```
+
+
+```{r}
+sprcag.files.ht %>% 
+  mutate(yr = as.integer(yr)) %>% 
+  ggTile_yr_season_site() +
+  labs(title = "Combined 'sprcag*.csv' files")
+
+```
+> Note missing data
+
+> Observation sites?
+
+### Ht from prod*.csv files
+```{r}
+files_prod_01_15 <- fs::dir_ls("./data/Yell_data_from_Hobbs_drive/Production all years", recurse = FALSE, glob = "*.csv")
+# regex
+# files_util_01_15 <- fs::dir_ls("./data/Yell_data_from_Hobbs_drive/Utilization all years", regexp = "\\.csv$")
+
+prod.files <- files_prod_01_15 %>%
+  map_df(~read_csv(., col_types = cols(.default = "c")))
+
+prod.files %>% 
+  glimpse()
+
+prod.files.ht <- prod.files %>%
+  mutate(season = "fall") %>% 
+  rename(wilid = willid) %>% 
+  rename(yr = year) %>% 
+  rename(pl_ht_cm = height) %>% 
+  select(yr,season, site,plot,wilid,pl_ht_cm) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>%
+  filter(!is.na(pl_ht_cm)) %>% 
+  distinct()
+
+prod.files.ht %>% 
+  visdat::vis_dat()
+
+prod.sprcag.ht <- bind_rows(prod.files.ht,sprcag.files.ht)
+
+```
+
+```{r}
+prod.sprcag.ht %>% 
+  mutate(site2 = paste0(site,"-", plot)) %>% 
+  ggTile_yr_season_site2() +
+  labs(subtitle = "Spring and Fall Data from sprcag*.csv and prod*.csv files", caption = "prod.sprcag.ht")
+
+prod.sprcag.ht %>% 
+  mutate(site2 = paste0(site,"-", plot)) %>% 
+  ggTile_yr_season_site()
+
+```
+
+>Note: where are the obs sites?
+
+>Error in files with eb4-cc?
 
 ## 2016 Production
 
@@ -521,6 +717,8 @@ p16.ht %>%
 
 
 ## 2016 Utilization
+
+The following show what I know now: **NO SPRING DATA FOR 2016**
 ```{r}
 # 2016 utilization
 u16.raw <- read_excel("./data/raw/utilization/Raw_2016_Utilization/2016_Raw_Utilization.xlsx", col_types = "text") %>% 
@@ -534,7 +732,7 @@ u16.raw <- u16.raw %>%
   rename(pl_ht_cm = ht_cm) %>%
   rename(live_dead = live) %>% 
   mutate(season = "spring") %>% 
-  mutate(yr = as.character('yr'))
+  mutate(yr = as.character(2016))
 
 # some cleaning
 u16.raw <- u16.raw %>% 
@@ -543,35 +741,24 @@ u16.raw <- u16.raw %>%
   mutate(site = if_else(site == "xtal","crystal",site)) %>% 
   mutate(site2 = paste0(site, "-", "plot")) 
 
-u16.raw %>% 
-  distinct(site, plot) %>% 
-  datatable()
+u16.raw <- u16.raw %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
 
+# u16.raw %>% 
+#   distinct(site, plot) %>% 
+#   datatable()
 
+```
+
+```{r}
 u16.ht <- u16.raw %>% 
-  select(c(site, site2, plot, species, wilid, pl_ht_cm, site)) %>% 
-  mutate(wilid_full = paste0(site,"-",plot,"-",wilid))
-
-u16.ht %>% 
-  visdat::vis_miss()
-
-# './data/2016_2017_Data_Entry_Format_WillowHt_2001_2015.csv'
-
-u16.ht <- u16.ht %>% 
-  left_join(., lu.wilid.spp.v2, by = "wilid_full") %>%
-  mutate(species = case_when(is.na(species.x)~species.y,
-                             is.na(species.y)~species.x,
-                             TRUE ~ "NA")) %>% 
-  select(-c(species.x, species.y))
+  select(c(yr, season, site, plot, wilid, pl_ht_cm)) %>% 
+  distinct() %>% 
+  filter(is.na(pl_ht_cm))
 
 u16.ht %>% 
   visdat::vis_dat()
 
-# u16.ht <- u16.ht %>% 
-#   filter(!is.na(pl_ht_cm))
-
-# u16.ht %>% 
-#   filter(is.na(species))
 ```
 
 ```{r}
@@ -770,7 +957,7 @@ u17.ht %>%
 
 _u17.ht_
 
-```{r, fig.height=8}
+```{r, eval = FALSE, fig.height=8}
 gg.u17 <- u17.ht %>% 
   ggplot(aes(x = site2, y = pl_ht_cm)) +
   geom_point(aes(color = plot))  +
@@ -803,31 +990,13 @@ files2018 <- fs::dir_ls("./data/raw/production/Raw_2018_Production", recurse = F
 #   set_names() %>% 
 #   map(read_then_csv, path = path)
 
-## not working as intended
-# read_then_csv2 <- function(fpath){
-#   fpath %>% 
-#   excel_sheets() %>%
-#   set_names() %>%
-#   map(read_then_csv, path = fpath)
-# } 
-#   
-# files2018 %>% 
-#   map(.x = .,read_then_csv2)
-
-# library(readxl)
-
-## orignal way. works but only reads in one sheet!!
-# #for each excel file name, read excel sheet and append to df
-# p18 <- files2018 %>% 
-#   map_df( ~ read_excel(path = .x,trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV46"))
-# # note use of specific range and skipping of column
 
 #### running the above function on 2018 data
 # p18 <- files2018 %>% 
 #   map_df(~ read_sheets(.))
 
 p18 <- files2018 %>% 
-  map_df(~ read_sheets_prod(.))
+  map_df(~ read_sheets_prod18(.))
 
 p18 <- p18 %>% 
   janitor::clean_names() %>% 
@@ -837,48 +1006,89 @@ p18 <- p18 %>%
 ```
 
 ```{r}
+## list of input raw files and tabs
+p18 %>% 
+  glimpse()
+
+
+```
+
+```{r, eval = FALSE}
+### parsing errors?
+p18 %>% 
+  filter(!is.na(stid_50)) %>% 
+  select(c(file_name,sheet_name)) %>% 
+  datatable(caption = "Possible parsing errors")
+
+p18 %>% 
+  filter(!is.na(date_8_13_18_8_14_18_8_15_18)) %>% 
+  select(c(file_name,sheet_name)) %>% 
+  datatable(caption = "Possible parsing errors")
+
+p18 <- p18 %>% 
+  mutate(site = case_when(is.na(site) & wilid == "408" ~ "elk",
+                           TRUE ~ site))
+
+
+p18 <- p18 %>% 
+  filter(!(is.na(site) & is.na(pl_ht_cm)))
+
+p18 %>%
+  select(c(file_name, wilid, plot, site, pl_ht_cm)) %>% 
+  tabyl(file_name, site) %>% gt()
+
+```
+
+```{r}
 # p19 %>% 
 #   names() %>%
 #   tibble::enframe(name = NULL) %>%
 #   datatable()
+
 ```
 
 ```{r}
 ## Select subset and type cast
 p18sel <- p18 %>% 
-  select(file_name, sheet_name, yr, season, site, plot, spp, wilid, pl_ht_cm, stid) 
+  select(yr, season, site, plot, wilid, pl_ht_cm) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
 
 
 # obs for na
 p18sel <- p18sel %>% 
-  mutate(plot = if_else(condition = is.na(plot), true = "obs", plot))
+  mutate(plot = if_else(condition = is.na(plot), true = "obs", plot)) %>% 
+  filter(!is.na(pl_ht_cm))
   
 p18sel %>% 
-  glimpse()
-
-p18sel %>% 
   visdat::vis_dat()
-
-# p18sel %>% 
-#   distinct() %>% 
-#   select(-date) %>% 
-#   filter(is.na(pl_ht_cm)) %>% 
-#   datatable(caption = "Missing plant ht - 2018 production")
 
 # eliminate duplicate rows 
 p18sel <- p18sel %>% 
   distinct() %>% 
   # select(-date) %>% 
-  filter(!is.na(pl_ht_cm))
+  filter(!is.na(pl_ht_cm)) %>% 
+  filter(!is.na(wilid))
 
-visdat::vis_dat(p18sel)
+p18sel <- p18sel %>%
+  filter(!is.na(site))
 
 ```
+
+```{r}
+p18sel %>% 
+  ggTile_yr_season_site() +
+  labs(caption = "p18sel")
+
+p18sel %>% 
+  ggTile_yr_season_plot() +
+  labs(caption = "p18sel")
+
+```
+
 
 ## 2019 Production
 
 ```{r}
-
 # updated as of 20191203
 files2019 <- fs::dir_ls("./data/raw/production/Raw_2019_Production", recurse = FALSE, glob = "*.xlsx")
 
@@ -890,14 +1100,12 @@ p19 <- p19 %>%
   mutate(yr = '2019') %>% 
   mutate(season = "fall")
 
-# p19 %>% 
-#   names() %>%
-#   tibble::enframe(name = NULL) %>%
-#   datatable()
+```
 
+```{r}
 ## Select subset and type cast
 p19sel <- p19 %>% 
-  select(file_name, sheet_name, yr, season, site, plot, spp, wilid, pl_ht_cm) 
+  select(file_name, sheet_name, yr, season, site, plot, wilid, pl_ht_cm) 
 
 p19sel <- p19sel %>% 
   mutate(plot = if_else(condition = (is.na(plot)), true = "obs", plot)) 
@@ -911,6 +1119,9 @@ p19sel <- p19sel %>%
                           site == "cresc" ~ "crescent",
                           TRUE ~ site))
 
+p19sel <- p19sel %>% 
+  filter(!(is.na(site) & is.na(pl_ht_cm)))
+
 p19sel %>% 
   # filter(plot == '3') %>%
   # datatable()
@@ -918,13 +1129,31 @@ p19sel %>%
   gt()
 
 # eliminate duplicate rows 
-p19sel <- p19sel %>% 
+p19sel <- p19sel %>%
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
+  filter(!is.na(pl_ht_cm)) %>% 
+  select(yr, season, site, plot, wilid, pl_ht_cm) %>% 
   distinct() 
 
+```
+
+
+```{r}
+p19sel %>% 
+  ggTile_yr_season_site() +
+  labs(caption = "p19.sel")
+
+p19sel %>% 
+  ggTile_yr_season_plot() +
+  labs(caption = "p19.sel")
+
+```
+
+```{r}
 ## combine 18 and 19
 p18p19sel <- bind_rows(p18sel, p19sel)
 
-visdat::vis_miss(p18p19sel)
+# visdat::vis_miss(p18p19sel)
 
 # make all lower
 p18p19sel <- p18p19sel %>%  
@@ -932,9 +1161,6 @@ p18p19sel <- p18p19sel %>%
 
 p18p19sel <- p18p19sel %>%
   filter(!is.na(pl_ht_cm))
-
-p18p19sel %>% 
-  distinct(plot)
 
 ```
 
@@ -945,13 +1171,12 @@ p18p19sel <- p18p19sel %>%
   filter(!is.na(pl_ht_cm)) %>% 
   mutate(site = case_when(is.na(site) & wilid == "408" ~ "elk",
                           TRUE ~ site)) %>% 
-  select(-c(file_name, spp, sheet_name, stid)) %>%
+  # select(-c(file_name, spp, sheet_name, stid)) %>%
   mutate(site = case_when(site == "lb41" ~ "lb4",
                           site == 'lost c' ~ "lostc",
                           site == "lost l" ~ "lostl",
                           TRUE ~ site)) %>% 
   distinct()
-## instead of a summary stat, just go with distinct()
 
 ## summarize the willow height by wilid and year
 # p1819.wilidht <- p18p19sel %>% 
@@ -959,34 +1184,35 @@ p18p19sel <- p18p19sel %>%
 #   summarise(pl_ht_cm = max(pl_ht_cm)) %>% 
 #   ungroup()
 
-
-
 ```
 
 ```{r}
+
 p1819.wilidht <- p18p19sel  
 
 # eliminate the na for plant height
 p1819.wilidht <- p1819.wilidht %>%
-  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
-  filter(!is.na(pl_ht_cm)) %>% 
   mutate(site2 = paste0(site,"-",plot)) %>% 
   mutate(wilid_full = paste0(site2,"-",wilid))
 
 ## some plots
 p1819.wilidht %>% ggTile_yr_season_site() +
   labs(caption = "p1819.wilidht")
+
 p1819.wilidht %>% ggTile_yr_season_site2()  +
   labs(caption = "p1819.wilidht")
+
+p1819.wilidht %>% ggTile_yr_season_plot()  +
+  labs(caption = "p1819.wilidht")
+
 ```
 
 
-## Additional 18 data?
-
-Here is another file containing data: Exp_2018_Production_Height_20181220.xls
-Seems to befall data, but not just for the exp sites. Not sure if it's comprehensive of what was collected in the Fall of 2018. 
-
 ```{r}
+## Additional 18 data?
+# 
+# Here is another file containing data: Exp_2018_Production_Height_20181220.xls
+# Seems to befall data, but not just for the exp sites. Not sure if it's comprehensive of what was collected in the Fall of 2018. 
 
 ht18fa.add <- read_sheets_prod(file = "./data/raw/production/Exp_2018_Production_Height_20181220.xlsx") %>% 
   janitor::clean_names()
@@ -1014,28 +1240,38 @@ ht18fa.add %>%
   ggTile_yr_season_site() +
   labs(caption = "ht18fa.add")
 
+##
+p1819.wilidht <- ht18fa.add %>% 
+  select(-c(sheet_name)) %>% 
+  bind_rows(.,p1819.wilidht) %>% 
+  distinct()
+
+# p1819.wilidht %>% ggTile_yr_season_site2()
+
+p1819.wilidht %>% ggTile_yr_season_plot()
 ```
+
 Not sure whther these duplicate records in the ht data assembled from the raw production files
 
 ```{r}
 # inspect before rowbind
 
-ht18fa.add %>% 
-  glimpse()
+# ht18fa.add %>% 
+#   glimpse()
+# 
+# p1819.wilidht %>% 
+#   glimpse()
 
-p1819.wilidht %>% 
-  glimpse()
-
-p1819.wilidht %>% ggTile_yr_season_plot
+p1819.wilidht %>% ggTile_yr_season_plot +
+  labs(caption = "p1819.wilidht")
 
 ```
-
 
 ## 2018 Utilization
 
 ```{r}
 ufiles2018 <- fs::dir_ls("./data/raw/utilization/Raw_2018_Utilization", recurse = FALSE, glob = "*.xlsx")
-
+# view(ufiles2018)
 ## single sheet
 # u18 <- ufiles2018 %>%
 #   map_df( ~ read_excel(path = .x,trim_ws = TRUE, skip = 1, col_types = "text"))
@@ -1047,17 +1283,18 @@ ufiles2018 <- fs::dir_ls("./data/raw/utilization/Raw_2018_Utilization", recurse 
 u18 <- ufiles2018 %>% 
   map_df(~ read_sheets_util(.))
 
-# u18 %>% distinct(file_name)
-
 # map_df( ~ read_excel(path = .x,trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV46"))
 # # note use of specific range and skipping of column
 
 u18 <- u18 %>% 
   janitor::clean_names() %>% 
-  mutate(yr = 2018) %>% 
+  mutate(yr = "2018") %>% 
   mutate(season = "spring") 
 
+u18 <- u18 %>%
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) 
 ```
+
 
 ```{r}
 
@@ -1066,11 +1303,8 @@ u18 <- u18 %>%
 u18 <- u18 %>% 
   mutate(site = case_when(site == "lb41" ~ "lb4",
                           TRUE ~ site)) 
-# u18 %>% 
-#   glimpse()
 
 ```
-
 
 ```{r}
 u18 %>% 
@@ -1079,46 +1313,57 @@ u18 %>%
   gt() %>% 
   tab_header(title = "variable names")
 
-u18 %>% 
-  distinct(site) %>% gt()
-
 ## WB?
 ## BIG fix: pl_ht and pl_ht_cm
 ## willid and wilid
-u18 %>% 
+u18 %>%
   select(file_name,contains("cm")) %>% 
   distinct()
 
+u18 %>% 
+  distinct(site) %>% gt()
+```
+
+
+```{r}
+u18 %>% names.dt()
+## !!!
 u18 <- u18 %>% 
-  mutate(pl_ht_cm = case_when(is.na(height_cm)~ ht_cm,
-                              is.na(pl_ht_cm)~height_cm,
-                              TRUE ~ pl_ht_cm)) %>%
+  mutate(height_cm = as.numeric(height_cm)) %>% 
+  mutate(ht_cm = as.numeric(ht_cm))
+  
+u18 %>% filter(is.na(pl_ht_cm) & !is.na(height_cm)) %>% 
+# & is.na(ht_cm))
+  select(pl_ht_cm, height_cm, ht_cm) %>% 
+  glimpse()
+
+u18 <- u18 %>% 
+  mutate(pl_ht_cm = if_else(condition = is.na(pl_ht_cm),true = height_cm,false = pl_ht_cm)) %>% 
+  mutate(pl_ht_cm = if_else(condition = is.na(pl_ht_cm),true = ht_cm, false = pl_ht_cm))
+
+u18 <- u18 %>% 
   mutate(wilid = case_when(is.na(wilid) ~ willid,
                               is.na(willid)~ wilid,
                               TRUE ~ wilid))%>% 
   filter(!is.na(pl_ht_cm)) %>%
   select(-c(height_cm,willid))
 
-u18 %>% 
-  select(file_name,contains("cm")) %>% 
-  distinct() %>% 
-  datatable()
-
 ### select subset of columns: for height
 u18.ht <- u18 %>%
   # glimpse()
-  select(c('file_name','yr','season', 'spp', 'plot','site','wilid','stid', 'pl_ht_cm'))
+  select(c('file_name','yr','season', 'plot','site','wilid','pl_ht_cm')) %>% 
+  distinct()
 
-# u18.ht %>% 
-#   filter(site == "wb")
+```
 
+
+```{r}
+### 2018 crescent
 u18.ht %>% 
   filter(!is.na(pl_ht_cm)) %>% 
-  # filter(!is.na(site)) %>% 
-  distinct(site) %>% 
-  gt::gt() %>% 
-  tab_header(title = "Distinct site on u18 import")
-
+  # distinct(site)
+  filter(site == "cresc") %>% 
+  select(wilid, site, plot, pl_ht_cm) 
 ```
 
 
@@ -1148,31 +1393,51 @@ u18.ht <- u18.ht %>%
 
 ```{r}
 ##########
-## calculate the per wilid height from population of stid
+## Extract per wilid height from population of stid observations
 ##########
+# u18.ht <- u18.ht %>% 
+#   filter(!is.na(pl_ht_cm)) %>% 
+#   group_by(yr, wilid, site, plot, season) %>% 
+#   summarise(pl_ht_cm = max(pl_ht_cm)) %>% 
+#   ungroup()
+
 u18.ht <- u18.ht %>% 
   filter(!is.na(pl_ht_cm)) %>% 
-  group_by(yr, wilid, site, spp, plot, season) %>% 
-  summarise(pl_ht_cm = max(pl_ht_cm)) %>% 
-  ungroup()
+  distinct()
+
+u18.ht <- u18.ht %>% 
+  mutate(yr = as.character(yr)) %>% 
+  mutate(wilid = case_when(wilid == "0316" ~ "316",
+                           TRUE ~ wilid)) 
 
 u18.ht <- u18.ht %>% 
   filter(!is.na(wilid)) %>%
   filter(!wilid == "") %>% 
   mutate(wilid = str_remove(.$wilid, ".0"))
 
+
+u18.ht %>% distinct(wilid) %>% datatable()
+
 u18.ht %>% 
-  distinct(site) 
+  tabyl(site) %>% 
+  datatable()
 
 ## where is wb???
 u18.ht %>% 
-  visdat::vis_miss()
+  visdat::vis_dat()
 
 ```
 
-#### Diagnostic plots
+```{r}
+u18.ht %>% 
+  ggTile_yr_season_plot()
+```
+
+
+No 'cx' for 2018 spring
 
 ```{r, eval = TRUE}
+#### Diagnostic plots
 u18.ht %>%
   # visdat::vis_guess() + 
   # visdat::vis_miss() +
@@ -1198,17 +1463,6 @@ plotly::ggplotly(u18.plot1)
 
 ## 2019 Utilization
 ```{r}
-### read_sheets
-# read_sheets <- function(file){
-#   xlsx_file <- file
-#   xlsx_file %>%
-#     excel_sheets() %>%
-#     set_names() %>%
-#     map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV46") %>% 
-#     mutate(file_name = file) %>% 
-#     select(file_name, sheet_name, everything())
-# }
-
 #### 
 ufiles2019 <- fs::dir_ls("./data/raw/utilization/Raw_2019_Utilization", recurse = FALSE, glob = "*.xlsx")
 
@@ -1233,36 +1487,52 @@ u19 <- u19 %>%
 u19 %>% 
   names() %>%
   tibble::enframe(name = NULL) %>%
-  datatable()
+  datatable(caption = "field names in raw utilization files")
 
-u19 <- u19 %>% 
+u19 <- u19 %>%
+  filter(!is.na(pl_ht_cm)) %>% 
   # mutate(pl_ht_cm = case_when(is.na(height_cm)~ ht_cm,
   #                             is.na(pl_ht_cm)~height_cm,
   #                             TRUE ~ pl_ht_cm)) %>%
   mutate(wilid = case_when(is.na(wilid) ~ willid,
                               is.na(willid)~ wilid,
-                              TRUE ~ wilid))%>% 
-  filter(!is.na(pl_ht_cm))
+                              TRUE ~ wilid))
 
 ### select subset of columns: for UTILIZATION
 # u19.sel <- u19 %>%
 #   # glimpse()
 #   select(c('date','yr','season', 'site','wilid','stid', 'live_status', 'scheme','height_cm','spp','len_dia'), contains("sht"),contains("x"))
 
-# u19 %>% visdat::vis_miss()
+```
 
+```{r}
 ### select subset of columns: for height
 u19.ht <- u19 %>%
   # glimpse()
   select(c(file_name, sheet_name, yr, site, season, spp, plot, wilid, stid, pl_ht_cm))
 
-# 'yr','season', 'spp', 'plot','site','wilid','stid', 'live_status', 'pl_ht_cm'))
 
+u19.ht <- u19.ht %>% 
+  mutate(site = case_when(is.na(site) & wilid == "408" ~ "elk",
+                          TRUE ~ site)) %>% 
+  mutate(site = case_when(site == "lb41" ~ "lb4",
+                          site == 'lost c' ~ "lostc",
+                          site == "lost l" ~ "lostl",
+                          TRUE ~ site)) %>% 
+  mutate(wilid = case_when(wilid == '0316' ~ "316",
+                           TRUE ~ wilid)) %>% 
+  distinct() %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
+  filter(!is.na(pl_ht_cm))
+
+u19.ht %>% ggTile_yr_season_site()
 ```
+
 
 ```{r}
 # rename, reclass
 u19.ht <- u19.ht %>% 
+  # filter(is.na(site))
   # mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
   mutate(plot = if_else(condition = is.na(plot), true = "obs", plot))
 
@@ -1274,37 +1544,43 @@ u19.ht <- u19.ht %>%
 # more cleaning
 u19.ht <- u19.ht %>% 
   filter(!is.na(pl_ht_cm)) %>%
-  filter(wilid != "NA")
+  filter(wilid != "na")
 
 visdat::vis_miss(u19.ht)
 
 ```
 
 ```{r}
-##########
-## calculate the per wilid height from population of stid
-##########
-u19.ht <- u19.ht %>% 
-  filter(!is.na(pl_ht_cm)) %>% 
-  group_by(yr, wilid, site, plot, season) %>% 
-  summarise(pl_ht_cm = max(pl_ht_cm)) %>% 
-  ungroup()
-
-u19.ht <- u19.ht %>% 
-  filter(!is.na(wilid))
-
-u19.ht <- u19.ht %>%
-  mutate_if(.predicate = is.character,.funs=tolower)
-
-visdat::vis_miss(u19.ht)
+u19 %>% 
+  visdat::vis_miss() +
+  theme(axis.text.x=element_blank()) +
+  labs(caption = "Data structure of raw utilization files")
 
 ```
 
+```{r}
+# ##########
+# ## calculate the per wilid height from population of stid
+# ##########
+# u19.ht <- u19.ht %>% 
+#   filter(!is.na(pl_ht_cm)) %>% 
+#   group_by(yr, wilid, site, plot, season) %>% 
+#   summarise(pl_ht_cm = max(pl_ht_cm)) %>% 
+#   ungroup()
 
-```{r, eval = TRUE}
+# enforce lower case
+u19.ht <- u19.ht %>%
+  mutate_if(.predicate = is.character,.funs=tolower)
+
+u19.ht <- u19.ht %>% 
+  select(-c(file_name, sheet_name, spp, stid)) %>% 
+  distinct()
+
+```
+
+```{r, eval = FALSE}
 u19.ht %>%
   visdat::vis_miss(cluster = TRUE) +
-  # visdat::vis_guess() + 
   theme_classic() +
   labs(title = "2019 Spring Height", subtitle = "Missing map for qa/qc") +
   scale_fill_viridis(discrete = TRUE) +
@@ -1313,18 +1589,70 @@ u19.ht %>%
 # plotly::ggplotly()
 ```
 
-### Diagnostic plots on the 2018 and 2019
+
+```{r}
+u19.ht <- u19.ht %>% 
+  distinct() %>% 
+  mutate(site = case_when(wilid == "415" & is.na(site) ~ "ghole",
+                      wilid == "418" & is.na(site) ~ "ghole",
+                      wilid == "449" & is.na(site) ~ "glen",
+                      wilid == "452" & is.na(site) ~ "glen",
+                      TRUE ~ site))
+
+## adress bad plots
+u19.ht <- u19.ht %>% 
+  # distinct(plot)
+  mutate(plot = case_when(plot == "1" ~ "obs",
+                          plot == "2" ~ "obs",
+                          TRUE ~ plot))
+
+u19.ht %>% ggTile_yr_season_site() + labs(caption = "u19.ht; cleaned sites")
+
+u19.ht %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  ggTile_yr_season_site2() + 
+  labs(caption = 'u19.ht; cleaned sites')
+
+```
+
+
+```{r}
+u19.ht %>% 
+  gt_tally_site_plot_yr_season()
+
+```
+
+
+```{r}
+u19.ht %>% 
+  mutate(yr = as.character(yr)) %>%
+  ggPoint_yr_site_season_plot()
+```
+
 
 ## Combine and QC
 
-### Combine 18 and 19 spring data
-```{r}
-#
-u19.ht <- u19.ht %>% 
-  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
 
+```{r}
+### Combine 18 and 19 spring data
+# type convert
+u19.ht <- u19.ht %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
+  mutate(yr = as.character(yr)) %>% 
+  filter(!is.na(pl_ht_cm))
+
+# row bind in 18
 u18u19.ht <- bind_rows(u18.ht,u19.ht)
 
+
+u18u19.ht %>% 
+  filter(wilid == "")
+
+u18u19.ht <- u18u19.ht %>% 
+  filter(wilid != "")
+
+
+# plot
 u18u19.ht %>% 
   mutate(site2 = paste0(site,"-",plot)) %>%
   ggTile_yr_season_site2(.) +
@@ -1332,7 +1660,7 @@ u18u19.ht %>%
 
 ```
 
-```{r}
+```{r, eval = FALSE}
 u18u19.ht %>% 
   # filter(!is.na(site)) %>%
   # select(wilid) %>% 
@@ -1347,76 +1675,16 @@ u18u19.ht %>%
 
 ```
 
-
 ```{r}
-# missing data check: spring 2018 and 2019
-# u18u19.ht %>%
-#   mutate(yr = as.character(yr)) %>%
-#   group_by(yr, season, site) %>%
-#   summarise(n= n()) %>%
-#   ggplot(aes(yr, site)) +
-#   geom_tile(aes(fill = n), color = 'black') +
-#   facet_wrap(~season)
-
-#### Creating an export file to update out of R
-# read in the most current version below this section
-# create lu for exp trt
-# wilid.lu <- w_ht %>%
-#   distinct(site, wilid, treat, exp, dam, browse)
-
-# plot.lu <- w_ht %>%
-#   distinct(treat, exp, dam, browse) %>% 
-#   mutate(plot = tolower(treat)) 
-
-# plot.lu %>% 
-#   write_csv("./data/plot_lookup_master.csv")
-
-# wilid.lu.1 <- w_ht %>%
-#   distinct(site, wilid, treat, exp, dam, browse)
- 
-# ## join with info
-# wilid.lu.2update <- left_join(p1819.wilidht, wilid.lu) %>% 
-#   distinct(site, wilid, treat, exp, dam, browse) %>% 
-#   filter(is.na(treat)) %>% 
-#   bind_rows(.,wilid.lu)
-# 
-## wilid.lu.2update %>% 
-##   write_csv("./data/wilid_lookup_master.csv") # have manually updated this output, read in below
-```
-
-
-```{r}
-#############
-####### read in the lu
-
-# wilid.lu <- read_csv("./data/wilid_lookup_master.csv",col_types = "ccccccc")
-
-# alt updated lu
-wilid.lu <- read_csv("./data/wilid_lookup_master_v2.csv",col_types = "cccc")
-
-wilid.lu <- wilid.lu %>% 
-  distinct()
-
-# change willid to wilid  
-# make everything lowercase
-# w_ht <- w_ht %>%
-#   rename(wilid = willid) %>%  
-#   mutate_if(.predicate = is.character,.funs=tolower)
+p1819.wilidht %>% ggPoint_yr_site_season_plot
 
 ```
 
 ```{r}
-## join the fall data with site info lu 
-# p1819.wilidht <- left_join(p1819.wilidht, wilid.lu)
-
-# fix na for treat
+# fix na for plot
 p1819.wilidht <- p1819.wilidht %>%
   mutate(plot = if_else(condition = is.na(plot),true = "obs", plot)) %>%
   mutate(site2 = paste0(site,"-",plot))
-
-    
-# plot lu
-# p1819.wilidht <- left_join(p1819.wilidht, plot.lu, by = "plot")
 
 p1819.wilidht <- p1819.wilidht %>% 
   mutate(season = "fall")
@@ -1424,7 +1692,6 @@ p1819.wilidht <- p1819.wilidht %>%
 ```
 
 ```{r}
-# u18u19.ht <- left_join(u18u19.ht, wilid.lu, by = "wilid") 
 
 ## adress missing sites
 # u18u19.ht <- u18u19.ht %>% 
@@ -1437,21 +1704,7 @@ p1819.wilidht <- p1819.wilidht %>%
 u18u19.ht <- u18u19.ht %>% 
   mutate(plot = if_else(condition = plot == "1",true = "obs","obs")) ## not sure why, but error with plot...
 
-# plot lu
-# u18u19.ht <- u18u19.ht %>% 
-#   # select(-treat) %>% 
-#   left_join(., plot.lu, by = "plot") %>%
-#   filter(!is.na(plot)) 
-
 # u18u19.ht %>% visdat::vis_miss()
-
-# add site info to 18 19 spring measurements
-# u18u19.ht <- left_join(u18u19.ht, plot.lu, by = "plot") 
-# View(u18u19.ht)
-
-# add plot info
-# u18u19.ht <- u18u19.ht %>% 
-#   left_join(., plot.lu, by = "plot")
 
 ```
 
@@ -1462,35 +1715,15 @@ u18u19.ht <- u18u19.ht %>%
 p1819.wilidht <- p1819.wilidht %>% 
   mutate(pl_ht_cm = as.numeric(pl_ht_cm))
 
-u18u19.ht <- u18u19.ht %>% 
-  filter(wilid != "")
-
-# p1819.wilidht <- p1819.wilidht %>%
-#   filter(live_status != "dead") %>% 
-#   filter(live_status != "missing")
-
 ht.all18.19 <- bind_rows(p1819.wilidht,u18u19.ht)
 
 ## eliminate NA fpr plant ht
 ht.all18.19 <- ht.all18.19 %>% 
   filter(!is.na(pl_ht_cm)) %>% 
-  rename(species = spp) 
+  filter(!is.na(wilid))
 
 ```
 
-```{r}
-
-ht.all18.19 <- ht.all18.19 %>% 
-  mutate(site = case_when(wilid == "415" & is.na(site) ~ "ghole",
-                      wilid == "418" & is.na(site) ~ "ghole",
-                      wilid == "449" & is.na(site) ~ "glen",
-                      wilid == "452" & is.na(site) ~ "glen",
-                      TRUE ~ site)) %>%
-  mutate(site2 = paste0(site,"-", plot)) %>% 
-  mutate(wilid_full = paste0(site2,"-", wilid))
-
-```
- 
 ```{r}
 ## ### 2018 2019
 # ### try to add spp info to the 18 and 19 
@@ -1512,6 +1745,12 @@ ht.all18.19 <- ht.all18.19 %>%
   mutate(site2 = paste0(site,"-", plot)) %>% 
   mutate(wilid_full = paste0(site2,"-", wilid))
 
+ht.all18.19 <- ht.all18.19 %>% 
+  mutate(wilid = case_when(wilid == "" & site == "lb5" ~ '1070',
+                           TRUE ~ wilid))
+
+ht.all18.19 <- ht.all18.19 %>% 
+  distinct()
 
 ht.all18.19 %>% 
   visdat::vis_miss()
@@ -1522,33 +1761,25 @@ Missing data:
 Yancy fall 2018
 
 ```{r}
-ht.all18.19 %>%
-  # filter(is.na(site))
-  mutate(yr = as.character(yr)) %>% 
-  group_by(yr, season, site2) %>%
-  summarise(n= n()) %>%
-  ggplot(aes(yr, site2)) +
-  geom_tile(aes(fill = n), color = 'black') +
-  facet_wrap(~season) +
-  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 7)) +
-  theme(axis.text.y = element_text(size = 7)) +
-  facet_wrap(~season)
 
-```
-
-```{r}
+ht.all18.19 <- ht.all18.19 %>% 
+  mutate(site = case_when(site == 'cresc'~'crescent',
+                          TRUE ~ site))
 
 ht.all18.19 %>% 
-  mutate(yr = as.character(yr)) %>% 
+  filter(plot != "obs") %>% 
   ggTile_yr_season_site2() +
-  labs(caption = "ht.all18.19")
+  labs(title = "Exp sites", caption = 'ht.all18.19')
+
+ht.all18.19 %>% 
+  filter(!(plot != "obs")) %>% 
+  ggTile_yr_season_site2() +
+  labs(title = "Obs sites", caption = 'ht.all18.19')
 
 ```
 
-
-### Bring in 16 17
-
 ```{r}
+### Bring in 16 17
 ## 16
 p16.ht <- p16.ht %>% 
   mutate(site2 = paste0(site,"-",plot)) %>% 
@@ -1622,7 +1853,7 @@ u17.ht <- u17.ht %>%
 
 ```
 
-```{r}
+```{r, echo = FALSE}
 ## Lewis's other entry data
 ht_lm_entry_17 <- ht_lm_entry_17 %>%
   select(-c(exp,dam,browse)) %>% 
@@ -1651,23 +1882,16 @@ u17_lmentry <- u17.ht %>%
 #### bind rows p16, p17, all ht 18 19
 # ht.all18.19 %>% distinct(wilid) %>% View()
 
-ht.all18.19 <- ht.all18.19 %>% 
-  mutate(wilid = case_when(wilid == "" & site == "lb5" ~ '1070'))
-
-ht.all18.19 %>%
-  filter(is.na(wilid))
-
 #### bind rows p16, p17, all ht 18 19
 p.16.17.18.19 <- ht.all18.19 %>%
   # rename(live_dead = live_status) %>% 
   mutate(yr = as.character(yr)) %>% 
-  select(-species) %>% 
   bind_rows(., p16p17) %>% 
   distinct()
 
 p.16.17.18.19 %>% 
   visdat::vis_dat()
-
+p.16.17.18.19 %>% ggTile_yr_season_plot_alt1()
 ## add in the other lewis ht entry file
 p.16.17.18.19 <- p.16.17.18.19 %>% 
   bind_rows(., u17_lmentry) %>%
@@ -1679,6 +1903,11 @@ p.16.17.18.19 %>%
 
 # p.16.17.18.19 %>%  distinct(wilid) %>% View()
 
+```
+
+
+```{r}
+
 u18u19.ht <- u18u19.ht %>% 
   mutate(yr = as.character(yr))
 
@@ -1687,9 +1916,48 @@ ht.all.16.17.18.19 <- p.16.17.18.19 %>%
   # select(-c(file_name,live_status)) %>% 
   distinct()
 
+u16.ht
+
+u17.ht
+
+## add in the 16 and 17 spring data
+
+```
+
+### Combine with the ht extracted from prodx.csv and sprcagx.csv 
+
+Scraping these files for any data 
+
+```{r}
+
+ht.all.16.17.18.19 <- ht.all.16.17.18.19 %>% 
+  mutate(site = case_when(site == "halibuff" ~ "hailbuff",
+                          site == "cresc" ~ 'crescent',
+                          site == "crescent" ~ "crescent",
+                          site == "lost l" ~ "lostl",
+                          site == "lost c" ~ "lostc",
+                          site == "xtal" ~ "crystal",
+                          TRUE ~ site)) %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site2,"-",wilid))
+
+# ht.all.16.17.18.19 <- ht.all.16.17.18.19 %>%
+#   filter(!is.na(site)) %>% 
+#   distinct()
+
+
 ```
 
 ```{r}
+ht.all.16.17.18.19 <- ht.all.16.17.18.19 %>% 
+  mutate(site = case_when(wilid == "415" & is.na(site) ~ "ghole",
+                      wilid == "418" & is.na(site) ~ "ghole",
+                      wilid == "449" & is.na(site) ~ "glen",
+                      wilid == "452" & is.na(site) ~ "glen",
+                      TRUE ~ site)) %>%
+  mutate(site2 = paste0(site,"-", plot)) %>% 
+  mutate(wilid_full = paste0(site2,"-", wilid))
+
 
 ht.all.16.17.18.19 %>% 
   group_by(yr, season, site) %>%
@@ -1705,57 +1973,64 @@ ht.all.16.17.18.19 %>%
   scale_fill_viridis(option = "C") +
   labs(caption = "Combined 2016 and 2017 fall height")
 
+
 ```
 
 ```{r}
+#
+prod.sprcag.ht %>% 
+  distinct(site)
 
-ht.all.16.17.18.19 <- ht.all.16.17.18.19 %>%
-  mutate(site = case_when(site == "halibuff" ~ "hailbuff",
-                          site == "cresc" ~ 'crescent',
-                          site == "crescent" ~ "crescent",
-                          site == "lost l" ~ "lostl",
-                          site == "lost c" ~ "lostc",
-                          site == "xtal" ~ "crystal",
-                          TRUE ~ site))
-  
-ht.all.16.17.18.19 <- ht.all.16.17.18.19 %>% 
-  mutate(site = case_when(wilid == "415" & is.na(site) ~ "ghole",
-                      wilid == "418" & is.na(site) ~ "ghole",
-                      wilid == "449" & is.na(site) ~ "glen",
-                      wilid == "452" & is.na(site) ~ "glen",
-                      TRUE ~ site)) %>%
-  mutate(site2 = paste0(site,"-", plot)) %>% 
-  mutate(wilid_full = paste0(site2,"-", wilid))
+ht.all.01.19 <- ht.all.16.17.18.19 %>% 
+  bind_rows(.,prod.sprcag.ht) %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site2,"-",wilid)) %>% 
+  filter(!is.na(pl_ht_cm)) %>% 
+  distinct()
+
+ht.all.01.19 %>% 
+  visdat::vis_dat()
+
+ht.all.01.19 %>% 
+  ggTile_yr_season_site()
 
 ```
 
-----
 ```{r}
 
 ## bind in the dcc from raw files
-dcc.ht.fa.spr <- dcc.ht.fa.spr %>% 
-  mutate(yr = as.character(yr))
+dcc.ht.fa.spr <- dcc.ht.fa.spr %>%
+  select(-c(species,wilid_full)) %>% 
+  distinct()
 
 dcc.ht.fa.spr %>% 
   visdat::vis_dat()
 
+## 
+# ht.all.16.17.18.19 %>% 
+#   mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
+#   mutate(yr = as.character(yr))
+
 dcc.16.17.18.19 <- ht.all.16.17.18.19 %>% 
-  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
-  mutate(yr = as.character(yr)) %>% 
   # select(-c(browse, exp, dam)) %>% 
   bind_rows(., dcc.ht.fa.spr) %>% 
-  mutate(site2 = paste0(site,"-",plot))
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site2,"-",wilid)) %>% 
+  filter(!is.na(pl_ht_cm))
 
 # dcc.16.17.18.19 <- dcc.16.17.18.19 %>% 
 #   left_join(.,wilid.spp.lu2) 
 
-dcc.16.17.18.19 <- dcc.16.17.18.19 %>%
-  select(-c(spp, species)) %>% 
-  distinct() 
+dcc.16.17.18.19 <- dcc.16.17.18.19 %>% 
+  distinct()
 
 dcc.16.17.18.19 %>% 
-  visdat::vis_miss()
+  visdat::vis_dat() +
+  labs(caption = 'dcc.16.17.18.19')
 
+```
+
+```{r}
 dcc.16.17.18.19 %>%
   group_by(yr, season, site) %>%
   summarise(n= n()) %>%
@@ -1773,14 +2048,8 @@ dcc.16.17.18.19 %>%
 
 
 ```{r}
-
-dcc.16.17.18.19 <- dcc.16.17.18.19 %>% 
-  mutate(yr = as.character(yr))
-
-
 ## bind in other dcc object
 dcc.16.17.18.19 <- ht.all18.19 %>% 
-  mutate(yr = as.character(yr)) %>% 
   bind_rows(.,dcc.16.17.18.19) %>%
   # select(-c(species, live_status)) %>% 
   distinct()
@@ -1915,17 +2184,6 @@ ht.combined <- ht.combined %>%
   mutate(site2 = paste0(site,"-",plot)) %>% 
   mutate(wilid_full = paste0(site,"-",plot,"-",wilid))
 
-# visdat::vis_miss(ht.combined)
-
-ht.combined %>%
-  group_by(yr, season, site) %>%
-  summarise(n= n()) %>%
-  ggplot(aes(yr, site)) +
-  geom_tile(aes(fill = n), color = 'black') +
-  facet_wrap(~season)+
-  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 7)) +
-  theme(axis.text.y = element_text(size = 7)) +
-  facet_wrap(~season)
 
 ```
 
@@ -1943,13 +2201,6 @@ ht.combined %>%
   theme(axis.text.y = element_text(size = 7)) +
   facet_wrap(~season)
 # ggsave("./output/output4qaqc/height_heatmap20191204 1937.pdf", width = 11, height = 8.5)
-
-# w_ht %>%
-#   group_by(yr, season, site) %>%
-#   summarise(n= n()) %>%
-#   ggplot(aes(yr, site)) +
-#   geom_tile(aes(fill = n), color = 'black') +
-#   facet_wrap(~season)
 
 ```
 
@@ -1973,20 +2224,13 @@ ht.combined <- ht.combined %>%
 #   mutate(pl_ht_cm = round(pl_ht_cm,0))
 
 ht.combined <- ht.combined %>% 
-  # mutate(wilid = as.numeric(round(pl_ht_cm,0))) %>%
-  mutate(wilid = as.character(wilid))
-
-ht.combined <- ht.combined %>% 
+  mutate(wilid = as.character(wilid)) %>% 
   filter(wilid != "0") %>% 
   distinct() 
 
 ht.combined <- ht.combined %>% 
   mutate(site = case_when(site == "hailbuff"~ "hailbuf",
                           TRUE ~ site))
-
-ht.combined %>% 
-  tabyl(site) %>% 
-  datatable()
 
 ```
 
@@ -2004,74 +2248,22 @@ ht.combined %>%
 
 ```
 
+### Rebind spring
 
 ```{r}
-#### lu merge
-# dcc.wilid.spp.lu
-# wilid.spp.lu <- wilid.spp.lu %>% 
-#   mutate(wilid_full = paste0(site, "-", plot, "-", wilid)) 
-
-## create a lu with dcc raw and v1 wilid spp list
-# wilid.spp.lu.2 <- bind_rows(wilid.spp.lu, dcc.wilid.spp.lu) %>% 
-#   distinct()
-
-# write_csv(wilid.spp.lu.2, "./data/wilid_spp._lu_v2.csv")
-
-```
-
-
-```{r, eval = FALSE, echo=FALSE}
-# create updated lu
-# ht.combined %>% 
-#   distinct(wilid, site, treat, exp, dam, browse, site2) %>%
-#   write_csv("./data/wilid_lookup_master_v2.csv")
-
-## create species lookup
-# nsf.ht.spr %>% 
-#   distinct(site, plot, species, wilid) %>% 
-#   write_csv("./data/wilid_spp_lu.csv")
-
-```
-
-### site problems 18 19 spring
-
-```{r}
-## attempt to get the 18 19 data back
-
-ht.combined  %>%  visdat::vis_dat()
+#### Site problems 18 19 spring
 
 ####### 
-sp1819 <- u18u19.ht %>% 
-  # select(-c('file_name','exp',"dam","browse")) %>% 
-  rename(species = spp) %>% 
-  mutate(yr = as.character(yr)) %>%
-  # distinct(live_status)
-  # filter(live_status == "live" | live_status == "live" | is.na(live_status)) %>% 
-  select(-c(species))
-
+u18u19.ht <- u18u19.ht %>% 
+  mutate(yr = as.character(yr))
+  
 ## bind in the spring1819
 ht.combined <- ht.combined %>% 
-  bind_rows(., sp1819) 
+  bind_rows(., u18u19.ht) 
 
 ht.combined <- ht.combined %>%
   mutate(site2 = paste0(site,"-",plot)) %>% 
   mutate(wilid_full = paste0(site2,"-",wilid))
-
-ht.combined %>% 
-  visdat::vis_dat()
-  
-ht.combined %>% 
-  # filter(plot != "obs") %>% 
-  group_by(yr, season, site2) %>%
-  summarise(n= n()) %>%
-  ggplot(aes(yr, site2)) +
-  geom_tile(aes(fill = n), color = 'black') +
-  facet_wrap(~season)
-
-# # type convert
-# ht.combined.fin2 <- ht.combined.fin2 %>% 
-#   mutate(exp = as.character(exp), dam = as.character(dam), browse = as.character(browse))
-
 
 ht.combined <- ht.combined %>%
   # filter(season == "spring") %>% 
@@ -2081,56 +2273,10 @@ ht.combined <- ht.combined %>%
                           site == "lost l" ~ "lostl",
                           TRUE ~ site))
 
-ht.combined <- ht.combined %>% 
-  select(yr, site, wilid, season, plot, pl_ht_cm, site2, wilid_full) %>%
-  distinct()
-  
-ht.combined %>% 
-  filter(is.na(site))
-
-# ht.combined %>% 
-#   distinct(site) %>% View()
-
-# ht.combined <- ht.combined %>%
-#   # filter(season == "spring") %>% 
-#   mutate(site = case_when(site == "lb41" ~ "lb4",
-#                           site == 'lost c' ~ "lostc",
-#                           site == "lost l" ~ "lostl",
-#                           TRUE ~ site)) %>% 
-#   select(yr, site, wilid, season, site, plot, pl_ht_cm, species)
-  
-# ht.combined.f3 <- bind_rows(ht.combined.fin2,ht.combined.final) %>% 
-#   distinct()
-
-```
-
-
-```{r}
-# filter(plot != "obs") %>%
-ht.combined %>% 
-  # filter(plot == "obs") %>% 
-  group_by(yr, season, site) %>%
-  summarise(n= n()) %>%
-  ggplot(aes(yr, site)) +
-  geom_tile(aes(fill = n), color = 'black') +
-  # facet_grid(season~yr) +
-  facet_wrap(~season)
-
-ht.combined %>%
-  distinct(site, wilid, plot) %>% 
-  arrange(wilid, site) %>% 
-  datatable(filter = "top")
-
-ht.combined <- 
-  ht.combined %>% 
-  filter(!is.na(wilid))
-  # filter(plot == 'obs' & site == "eb2") %>%
-  # filter(plot == 'obs' & site == "eb2")
-
-ht.combined <- ht.combined %>% 
-  mutate(plot = if_else(is.na(plot), "obs", plot)) 
-         
-ht.combined %>% visdat::vis_dat()
+# ht.combined <- 
+#   ht.combined %>% 
+#   filter(!is.na(wilid)) %>% 
+#   plot = if_else(is.na(plot), "obs", plot) 
 
 ## more site name cleanup
 ht.combined <- ht.combined %>% 
@@ -2138,16 +2284,121 @@ ht.combined <- ht.combined %>%
                           site == "hailbuff" ~ "hailbuf",
                           TRUE ~ site))
 
-## check site
-# ht.combined.f3 %>%
-#   distinct(site) %>%  View()
-
 ## Create site2
 ht.combined <- ht.combined %>% 
-  mutate(site2 = paste0(site,"-",plot))
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site2,"-",wilid))
 
-# ht.combined.f3 <- ht.combined.f3 %>% 
-#   filter(!is.na(site))
+
+ht.combined <- ht.combined %>% 
+  select(yr, wilid, site, site2, season, plot, pl_ht_cm, wilid_full) %>%
+  distinct()
+
+```
+
+```{r}
+ht.combined <- ht.combined %>% 
+  # select(-species) %>% 
+  mutate(plot = case_when(site == "crescent" & plot == "cc" ~ "obs",
+                          site == "cresc" & plot == "cc" ~ "obs",
+                          site == "elk1" & plot == "cc" ~ "obs",
+                          site == "elk2" & plot == "cc" ~ "obs",
+                          site == "elk3" & plot == "cc" ~ "obs",
+                          site == "elk4" & plot == "cc" ~ "obs",
+                          site == "elk5" & plot == "cc" ~ "obs",
+                          site == "ghole" & plot == "cc" ~ "obs",
+                          site == "hailbuf" & plot == "cc" ~ "obs",
+                          site == "lava" & plot == "cc" ~ "obs",
+                          site == "lb" & plot == "cc" ~ "obs",
+                          site == "lb1" & plot == "cc" ~ "obs",
+                          site == "lb2" & plot == "cc" ~ "obs",
+                          site == "lb3" & plot == "cc" ~ "obs",
+                          site == "lb4" & plot == "cc" ~ "obs",
+                          site == "lostc" & plot == "cc" ~ "obs",
+                          site == "lostl" & plot == "cc" ~ "obs",
+                          site == "oxbow" & plot == "cc" ~ "obs",
+                          site == "rose" & plot == "cc" ~ "obs",
+                          site == "slide" & plot == "cc" ~ "obs",
+                          site == "wb1" & plot == "cc" ~ "obs",
+                          site == "wb2" & plot == "cc" ~ "obs",
+                          site == "wb4" & plot == "cc" ~ "obs",
+                          site == "yancy" & plot == "cc" ~ "obs",
+                          TRUE ~ plot
+                          )) %>%
+  mutate(plot = case_when(site == "glen" ~ "obs",
+                          site == "hailbuff" ~ "obs",
+                          TRUE ~ plot)) %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site,"-",wilid))
+
+```
+
+```{r}
+ht.combined %>% 
+  visdat::vis_dat()
+  
+```
+
+# v 
+```{r}
+## try to retireve the 18 spring data that went missing 
+ht.combined  <- ht.combined %>% 
+  select(-c(site2, wilid_full)) %>% 
+  bind_rows(., u18.ht) %>% 
+  distinct() %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site,"-",wilid))
+
+ht.combined %>% 
+  filter(plot != "obs") %>% 
+  ggTile_yr_season_site2()
+
+## try to retireve the 19 spring data that went missing 
+ht.combined  <- ht.combined %>% 
+  select(-c(site2, wilid_full)) %>% 
+  bind_rows(., u19.ht) %>% 
+  distinct() %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site,"-",wilid))
+
+ht.combined %>% 
+  # filter(plot != "obs") %>% 
+  ggTile_yr_season_site2()
+
+## fix obvious site issues
+ht.combined <- ht.combined %>% 
+  select(-c(site2, wilid_full)) %>%
+  mutate(site = case_when(site == "cresc" ~ "crescent",
+                          site == "lost l" ~ "lostl",
+                          site == "lost c" ~ "lostc",
+                          site == "hailbuf" ~"hailbuff",
+                          TRUE ~ site)) %>% 
+  distinct() %>%   
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site,"-",wilid))
+
+ht.combined %>% ggTile_yr_season_site2()
+
+
+ht.combined <- ht.combined %>% 
+  select(-file_name)
+
+```
+
+## what happended to 18 spr cresc?
+```{r}
+u18.ht %>% 
+  # distinct(site) %>% 
+  filter(site == "cresc")
+
+```
+
+
+```{r}
+## 
+ht.combined %>% 
+  ggTile_yr_season_site2()
+
 
 ```
 
@@ -2201,29 +2452,54 @@ ht.combined <- ht.combined %>%
 ## add full id to join with species
 # wilid and site are not unique
 ht.combined <- ht.combined %>% 
-  mutate(wilid_full = paste0(site2,"-",wilid)) %>% 
   filter(!is.na(pl_ht_cm))
 
 ```
 
 ```{r}
+# ht.combined <- ht.combined %>% 
+#   mutate(plot = case_when(site == "crescent" & plot == "cc" ~ "obs",
+#                           site == "elk1" & plot == "cc" ~ "obs",
+#                           site == "elk2" & plot == "cc" ~ "obs",
+#                           site == "elk3" & plot == "cc" ~ "obs",
+#                           site == "elk4" & plot == "cc" ~ "obs",
+#                           site == "elk5" & plot == "cc" ~ "obs",
+#                           site == "ghole" & plot == "cc" ~ "obs",
+#                           site == "hailbuf" & plot == "cc" ~ "obs",
+#                           site == "lava" & plot == "cc" ~ "obs",
+#                           site == "lb" & plot == "cc" ~ "obs",
+#                           site == "lb1" & plot == "cc" ~ "obs",
+#                           site == "lb2" & plot == "cc" ~ "obs",
+#                           site == "lb3" & plot == "cc" ~ "obs",
+#                           site == "lb4" & plot == "cc" ~ "obs",
+#                           site == "lostc" & plot == "cc" ~ "obs",
+#                           site == "lostl" & plot == "cc" ~ "obs",
+#                           site == "oxbow" & plot == "cc" ~ "obs",
+#                           site == "rose" & plot == "cc" ~ "obs",
+#                           site == "slide" & plot == "cc" ~ "obs",
+#                           site == "wb1" & plot == "cc" ~ "obs",
+#                           site == "wb2" & plot == "cc" ~ "obs",
+#                           site == "wb4" & plot == "cc" ~ "obs",
+#                           site == "yancy" & plot == "cc" ~ "obs",
+#                           TRUE ~ plot
+#                           ))
+#   
+```
+
+
+```{r}
+
+ht.combined %>% ggTile_yr_season_site2()
+
 ## cleaning
+ht.combined %>% 
+  filter(season  == "spring") %>% 
+  tabyl(site,plot)
 
 ht.combined <- ht.combined %>%
   mutate(wilid_full = paste0(site2,"-",wilid))
   
 # Eliminate species codes, find distinct, then join in the species from LU
-
-ht.combined <- ht.combined %>%
-  distinct(yr, site, wilid, season, plot, pl_ht_cm, site2, wilid_full)
-
-ht.combined <- ht.combined %>% 
-  left_join(.,lu_spp_site2, by = "wilid_full") 
-
-ht.combined %>% 
-  filter(is.na(species)) %>% 
-  select(yr,season,wilid, wilid_full, pl_ht_cm) %>% 
-  datatable(caption = "wilid_full lacking species. Manually check and update lookup table")
 
 # manually correct missing sites in raw files and
 # regenerate the full_id
@@ -2237,7 +2513,7 @@ ht.combined <- ht.combined %>%
   mutate(wilid_full = paste0(site2,"-", wilid))
 
 ## still issues with wilid decimal points
-ht.combined <-  ht.combined %>% 
+ht.combined <-  ht.combined %>%
   mutate(wilid = str_remove(.$wilid, ".0")) 
 
 ## !!  
@@ -2246,7 +2522,6 @@ ht.combined <- ht.combined %>%
   filter(!is.na(wilid)) %>% 
   filter(wilid != "0") %>%
   mutate(wilid_full = paste0(site,"-",plot,"-",wilid)) %>% 
-  select(-species) %>% 
   distinct()
 
 # problem records: plot
@@ -2271,20 +2546,80 @@ ht.combined %>%
 
 ```
 
-
+# bind in the sprcag and prod derived ht data
 ```{r}
-## still missing species. Export records
-# ht.combined %>%
-#   left_join(.,lu_spp_site2, by = "wilid_full") %>%
-#   filter(is.na(species)) %>%
-#   select(yr,season,wilid, wilid_full, pl_ht_cm) %>%
-#   distinct(wilid_full) %>%
-#   write_csv("./data/lu_spp_full_wilid_MANUALLY_figureout_and_add_wilid_full.csv")
+ht.combined <- ht.combined %>% 
+  mutate(wilid = as.character(wilid)) %>% 
+  bind_rows(., ht.all.01.19)
+
+ht.combined <- ht.combined %>%
+  distinct() 
+
+ht.combined <- ht.combined %>%
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site,"-",wilid))
+  
+
+ht.combined %>%
+  visdat::vis_dat()
+
+ht.combined %>% 
+  ggTile_yr_season_site()
+
+ht.combined %>% 
+  filter(plot != "obs") %>% 
+  ggTile_yr_season_site2()
+
+ht.combined %>% 
+  filter(plot != "obs")
+  
+
+ht.combined %>% 
+  ggTile_yr_season_site2()
+
 ```
 
 
-### QA QC checks on combined data
 ```{r}
+### more cleaning
+ht.combined <- ht.combined %>% 
+  filter(!is.na(site)) 
+
+# still misclassified plot
+
+```
+
+```{r}
+##
+ggTile_yr_season_site2(df = ht.combined) +
+  labs(caption = 'ht.combined')
+
+
+```
+
+```{r}
+ht.combined %>% 
+  mutate(yr = as.integer(yr)) %>% 
+  filter(yr == 2019 & site == "eb1") %>% 
+  tabyl(plot, season)
+```
+
+```{r}
+## more filtering
+ht.combined <- ht.combined %>% 
+  filter(pl_ht_cm < 1000)
+
+ht.combined %>% 
+  filter(site == "glen") %>% 
+  distinct(plot)
+
+
+
+```
+
+
+```{r}
+### QA QC checks on combined data
 ht.combined %>%
   distinct(wilid) %>% 
   datatable(caption = "distinct wilid")
@@ -2299,9 +2634,27 @@ ht.combined %>%
 
 ```
 
+
 ```{r}
-##
-ggTile_yr_season_site2(df = ht.combined)
+ht.combined %>% 
+  mutate(yr = as.character(yr)) %>%
+  ggPoint_yr_site_season_plot()
+```
+
+
+```{r, fig.height=8}
+gg.plty1 <- ht.combined %>% 
+  ggplot(aes(x = site2, y = pl_ht_cm)) +
+  geom_point(aes(color = plot))  +
+  coord_flip()
+
+plotly::ggplotly(gg.plty1)
+
+```
+
+```{r}
+ht.combined %>% 
+  tbqc_exp()
 
 ```
 
@@ -2375,6 +2728,36 @@ ht.combined %>% visdat::vis_dat()
 
 ht.combined %>%
   write_csv("./output/processed_data/ht_combined20191219_0126.csv")
+
+```
+
+
+## lookup export
+```{r}
+#### lu merge
+# dcc.wilid.spp.lu
+# wilid.spp.lu <- wilid.spp.lu %>% 
+#   mutate(wilid_full = paste0(site, "-", plot, "-", wilid)) 
+
+## create a lu with dcc raw and v1 wilid spp list
+# wilid.spp.lu.2 <- bind_rows(wilid.spp.lu, dcc.wilid.spp.lu) %>% 
+#   distinct()
+
+# write_csv(wilid.spp.lu.2, "./data/wilid_spp._lu_v2.csv")
+
+```
+
+
+```{r, eval = FALSE, echo=FALSE}
+# create updated lu
+# ht.combined %>% 
+#   distinct(wilid, site, treat, exp, dam, browse, site2) %>%
+#   write_csv("./data/wilid_lookup_master_v2.csv")
+
+## create species lookup
+# nsf.ht.spr %>% 
+#   distinct(site, plot, species, wilid) %>% 
+#   write_csv("./data/wilid_spp_lu.csv")
 
 ```
 
