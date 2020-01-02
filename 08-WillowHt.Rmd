@@ -65,7 +65,7 @@ read_sheets <- function(file){
   xlsx_file %>%
     excel_sheets() %>%
     set_names() %>%
-    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DV86") %>% 
+    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DW700") %>% 
     mutate(file_name = file) %>% 
     select(file_name, sheet_name, everything())
 }
@@ -76,7 +76,7 @@ read_sheets_prod <- function(file){
   xlsx_file %>%
     excel_sheets() %>%
     set_names() %>%
-    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:Dw136") %>% 
+    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DW700") %>% 
     mutate(file_name = file) %>% 
     select(file_name, sheet_name, everything())
 }
@@ -87,7 +87,7 @@ read_sheets_prod18 <- function(file){
     excel_sheets() %>%
     set_names() %>%
     # map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:Dw136") %>%
-    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text") %>%
+    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DW700") %>%
     mutate(file_name = file) %>% 
     select(file_name, sheet_name, everything())
 }
@@ -98,7 +98,7 @@ read_sheets_util <- function(file){
   xlsx_file %>%
     excel_sheets() %>%
     set_names() %>%
-    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DQ170") %>% 
+    map_df(read_excel, path = xlsx_file, .id = 'sheet_name', trim_ws = TRUE, skip = 1, col_types = "text", range = "A2:DW700") %>% 
     mutate(file_name = file) %>% 
     select(file_name, sheet_name, everything())
 }
@@ -983,6 +983,7 @@ u17.ht %>%
 # updated as of 20191203
 files2018 <- fs::dir_ls("./data/raw/production/Raw_2018_Production", recurse = FALSE, glob = "*.xlsx")
 
+
 ## csv cache
 # path <- readxl_example("datasets.xlsx")
 # path %>%
@@ -1269,6 +1270,7 @@ p1819.wilidht %>% ggTile_yr_season_plot +
 
 ## 2018 Utilization
 
+
 ```{r}
 ufiles2018 <- fs::dir_ls("./data/raw/utilization/Raw_2018_Utilization", recurse = FALSE, glob = "*.xlsx")
 # view(ufiles2018)
@@ -1293,17 +1295,20 @@ u18 <- u18 %>%
 
 u18 <- u18 %>%
   mutate(pl_ht_cm = as.numeric(pl_ht_cm)) 
+
+u18 %>% 
+  tabyl(plot, site) %>% 
+  datatable()
+
 ```
 
 
 ```{r}
-
 ## whack a mole.
 # change lb41 to lb4
 u18 <- u18 %>% 
   mutate(site = case_when(site == "lb41" ~ "lb4",
                           TRUE ~ site)) 
-
 ```
 
 ```{r}
@@ -1322,11 +1327,12 @@ u18 %>%
 
 u18 %>% 
   distinct(site) %>% gt()
+
 ```
 
 
 ```{r}
-u18 %>% names.dt()
+# u18 %>% names.dt()
 ## !!!
 u18 <- u18 %>% 
   mutate(height_cm = as.numeric(height_cm)) %>% 
@@ -1365,7 +1371,6 @@ u18.ht %>%
   filter(site == "cresc") %>% 
   select(wilid, site, plot, pl_ht_cm) 
 ```
-
 
 ```{r}
 
@@ -1419,7 +1424,7 @@ u18.ht <- u18.ht %>%
 u18.ht %>% distinct(wilid) %>% datatable()
 
 u18.ht %>% 
-  tabyl(site) %>% 
+  tabyl(site, plot) %>% 
   datatable()
 
 ## where is wb???
@@ -1451,13 +1456,63 @@ u18.ht %>%
 
 ```{r}
 
-u18.plot1 <- u18.ht %>% 
+u18.plotly.exp <- u18.ht %>% 
+  filter(plot != "obs") %>% 
+  filter(pl_ht_cm <550) %>% 
   mutate(yr = as.character(yr)) %>% 
   ggplot(aes(site, pl_ht_cm)) +
   # geom_boxplot(aes(color = site)) +
-  geom_jitter(alpha = .5)
-plotly::ggplotly(u18.plot1)  
+  # geom_boxplot(aes(fill = plot)) +
+  geom_jitter(alpha = .5, aes(shape = plot, color = plot)) +
+  labs(y = "Height (cm)", title = "2018 Spring Data")
+plotly::ggplotly(u18.plotly.exp)  
 
+```
+
+```{r}
+# plot facet
+u18.plotly.exp.bx <- u18.ht %>% 
+  filter(plot != "obs") %>% 
+  filter(pl_ht_cm <550) %>% 
+  mutate(yr = as.character(yr)) %>% 
+  ggplot(aes(plot, pl_ht_cm)) +
+  # geom_boxplot(aes(color = site)) +
+  geom_boxplot(aes(fill = plot)) +
+  geom_jitter(alpha = .8, aes(shape = plot),color = "black") +
+  facet_wrap(~site) +
+  labs(y = "Height (cm)", title = "2018 Spring Data")
+plotly::ggplotly(u18.plotly.exp.bx)  
+
+```
+
+```{r, fig.height=9}
+# text plot
+u18.plotly.exp.tx<- u18.ht %>% 
+  filter(plot != "obs") %>% 
+  filter(pl_ht_cm <550) %>% 
+  mutate(yr = as.character(yr)) %>% 
+  ggplot(aes(plot, pl_ht_cm)) +
+  # geom_boxplot(aes(color = site)) +
+  # geom_boxplot(aes(fill = plot)) +
+  # geom_jitter(alpha = .8, aes(shape = plot),color = "black") +
+  geom_text_repel(aes(label = wilid), size = 2.25) +
+  geom_point(color = "blue") +
+  # facet_wrap(~site) +
+  facet_grid(~site) +
+  labs(y = "Height (cm)", title = "2018 Spring Data")
+u18.plotly.exp.tx
+
+```
+
+```{r}
+u18.plotly.obs <- u18.ht %>% 
+  filter(plot == "obs") %>% 
+  mutate(yr = as.character(yr)) %>% 
+  ggplot(aes(site, pl_ht_cm)) +
+  # geom_boxplot(aes(color = site)) +
+  geom_jitter(alpha = .5, aes(shape = plot, color = plot)) +
+  labs(y = "Height (cm)", title = "2018 Spring Data")
+plotly::ggplotly(u18.plotly.obs) 
 ```
 
 
@@ -2004,12 +2059,11 @@ ht.all.16.17.18.19 %>%
 
 
 ```
-#v
+
 ```{r}
 #
 prod.sprcag.ht %>% 
   tabyl(site)
-
 
 # fix 
 ht.all.16.17.18.19 %>% ggTile_yr_season_site2()
@@ -2725,16 +2779,143 @@ ht.combined %>% visdat::vis_dat()
 
 ```
 
-## Export
+```{r}
 
-```{r, eval=FALSE}
+# ht.combined %>% 
+#   mutate(flag_high  = case_when())
 
-ht.combined %>%
-  write_csv("./output/processed_data/ht_combined20191221_0126.csv")
+
+ht.combined <- ht.combined %>% 
+  filter(!(yr == "2006" & pl_ht_cm == 460)) %>%
+  filter(pl_ht_cm > 1)
+
+p <- ht.combined  %>% 
+  # mutate(pl_ht_cm = if_else(condition = pl_ht_cm < 1, true = pl_ht_cm*100, false = pl_ht_cm)) %>% 
+  filter(site == "eb1") %>% 
+  ggplot(aes(yr,pl_ht_cm)) +
+  geom_jitter(aes(color = plot)) +
+  facet_wrap(~site2) 
+
+plotly::ggplotly(p)
+
+# pltly1  
+pltly1 <- ht.combined %>% 
+  filter(plot != "obs") %>% 
+  ggplot(aes(yr,pl_ht_cm)) +
+  geom_jitter(aes(color = plot)) +
+  facet_wrap(~site2)
+
+plotly::ggplotly(pltly1)
 
 ```
 
 
+```{r}
+# fix
+ht.combined <- ht.combined %>%
+  filter(!is.na(site))
+
+ht.combined %>%
+  filter(!is.na(site)) %>% 
+  filter(wilid == "353") %>% 
+  ggplot(aes(yr, pl_ht_cm)) +
+  geom_point(aes(color = season)) +
+  # geom_label_repel(aes(label = wilid)) +
+  geom_label(aes(label = season), size = 2.5) +
+   geom_point(aes(color = season), size = 6, alpha = .1) +
+  facet_wrap(~site, ncol = 1) +
+  theme_minimal() +
+  # facet_grid(season~site) +
+  labs(title = "wilid 353: suspect 'site' attribution for elk and elk1")
+
+# make educated guess and reclass site for 2014
+ht.combined <- ht.combined %>% 
+  mutate(site = case_when(yr == "2014" & site == "elk" ~ "elk2",
+                          TRUE ~ site))
+
+
+ht.combined %>%
+  filter(!is.na(site)) %>% 
+  filter(wilid == "353") %>% 
+  ggplot(aes(yr, pl_ht_cm)) +
+  geom_point(aes(color = season)) +
+  # geom_label_repel(aes(label = wilid)) +
+  geom_label(aes(label = season), size = 2.5) +
+   geom_point(aes(color = season), size = 6, alpha = .1) +
+  facet_wrap(~site, ncol = 1) +
+  # facet_grid(season~site) +
+  labs(title = "wilid 353: suspect 'site' attribution for elk and elk1")
+
+ht.combined %>%
+  filter(!is.na(site)) %>% 
+  filter(wilid == "353") %>% 
+  ggplot(aes(yr, pl_ht_cm)) +
+  geom_point(aes(color = season)) +
+  # geom_label_repel(aes(label = wilid)) +
+  geom_label(aes(label = wilid)) +
+  facet_wrap(~site, ncol = 1) +
+  # facet_grid(season~site) +
+  labs(title = "wilid 353: suspect 'site' attribution for elk and elk1")
+
+```
+
+```{r}
+# clean
+# address issue of crystal and elk 2 as != obs
+ht.combined <- ht.combined %>%
+  mutate(plot = case_when(site == "crystal" ~ "obs",
+                          TRUE ~ plot)) %>% 
+  mutate(plot = case_when(site == "elk2" ~ "obs",
+                          TRUE ~ plot)) %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  mutate(wilid_full = paste0(site2,"-",wilid)) %>% 
+  select(-c(species, spp_notes)) %>% 
+  distinct()
+
+```
+
+```{r}
+
+# gt.1 <- function(df){
+#   df %>% 
+#     gt::gt() %>% 
+#     tab_header(title = "Count")
+# }
+# 
+# ht.combined %>%
+#   filter(plot != "obs") %>%
+#   filter(season == "spring") %>% 
+#   tabyl(site, plot, yr) %>%
+#   # set_names() %>% 
+#   map_df(.,rbind, .id = 'names') %>% 
+#   gt() %>% 
+#   tab_header(title = "Spring data - count of observations")
+
+ht.combined %>%
+  # filter(site == "elk2") %>% 
+  filter(plot != "obs") %>%
+  filter(season == "spring") %>% 
+  tabyl(site, plot, yr) %>%
+  # set_names() %>% 
+  map_df(.,rbind, .id = 'yr') %>% 
+  datatable(caption = "Spring data - count of observations", rownames = FALSE, filter = "top")
+
+```
+
+
+```{r, eval = FALSE}
+
+ht.combined.nest <- ht.combined %>%
+  # filter(wilid == "353")
+  group_by(site, yr) %>% 
+  nest()
+
+ht.combined.nest %>%
+  pluck(3) %>% 
+  pluck(5) %>%
+  gt()
+
+```
 
 ```{r}
 #### lu merge
@@ -2750,7 +2931,6 @@ ht.combined %>%
 
 ```
 
-
 ```{r, eval = FALSE, echo=FALSE}
 # create updated lu
 # ht.combined %>% 
@@ -2765,6 +2945,38 @@ ht.combined %>%
 ```
 
 ## Plots
+
+```{r,fig.height=10, fig.width=9, eval = FALSE, echo=FALSE}
+### boxplots of Fall height measurements
+# ht.combined %>% 
+#   filter(site == "elk2" & yr == "2014")
+
+ht.combined %>% 
+  filter(season=="fall") %>% 
+  filter(plot != "obs") %>% 
+  ggplot(aes(x=yr,y=pl_ht_cm)) +
+  geom_boxplot(aes(fill = plot)) +
+  theme_minimal() +
+  # theme(legend.position = "none") +
+  labs(title = "Fall height measurements", y = "Height (cm)") +
+  facet_wrap(~site, ncol=1, scales = "free") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=9, angle=75, hjust = 1))
+
+ht.combined %>% 
+  filter(season=="spring") %>% 
+  filter(plot != "obs") %>% 
+  ggplot(aes(x=yr,y=pl_ht_cm)) +
+  geom_boxplot(aes(fill = plot)) +
+  theme_minimal() +
+  # theme(legend.position = "none") +
+  labs(title = "Spring height measurements", y = "Height (cm)") +
+  facet_wrap(~site, ncol=1, scales = "free") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=9, angle=75, hjust = 1))
+
+```
+
 
 ```{r}
 ## summarize by site2 and year using skimr
@@ -2814,18 +3026,6 @@ summary.by.site2 %>%
   labs(x = "Year", y = "", subtitle = "Mean willow height", fill = "Height (cm)", caption = getwd())
 # ggsave("./output/median_willow_height_HM_20191205_0924.png", width = 7, height = 7)
 
-# summary.by.site2 %>%
-#   select(yr, plot, site2, skim_variable, contains("numeric")) %>% 
-#   filter(!(site2 == "elk-dx" & yr == 2019)) %>% 
-#   filter(skim_variable == "pl_ht_cm") %>% 
-#   filter(plot != "obs") %>%  
-#   ggplot(aes(yr, plot)) +
-#   geom_tile(aes(fill = numeric.mean)) +
-#   scale_fill_viridis() +
-#   theme_light() +
-#   facet_wrap(~site2) +
-#   labs(x = "Year", y = "", subtitle = "Mean willow height", fill = "Height (cm)", caption = getwd())
-# ggsave("./output/median_willow_height_HM_20191205_0924.png", width = 7, height = 7)
 ```
 
 
@@ -2851,6 +3051,17 @@ summary.by.site2 %>%
 #   write_csv("./data/lu_spp_site2.csv")
 
 ```
+
+## Export
+
+```{r, eval=FALSE}
+
+ht.combined %>%
+  # select(-c(species, spp_notes)) %>% 
+  write_csv("./output/processed_data/ht_combined20191231_1142.csv")
+
+```
+
 
 # Notes
 
