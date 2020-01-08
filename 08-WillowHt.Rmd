@@ -210,8 +210,6 @@ gt_tally_site_plot_yr_season <- function(df){
     tab_header(title = "tally")
 } 
 
-
-
 ```
 
 ### Table functions
@@ -228,6 +226,7 @@ names.dt <- function(df){
   names() %>% enframe %>% 
     DT::datatable(caption = "field names")
 }
+
 
 ```
 
@@ -250,6 +249,9 @@ wilid.spp.lu2 <- read_csv("./data/wilid_spp._lu_v2.csv") %>%
 lu.wilid.spp.v2 <- read_csv("./data/wilid_spp._lu_v2.csv") %>% 
   select(c(species, wilid_full)) %>% 
   distinct()
+
+# lu.wilid.spp.v2 %>% 
+#   tabyl(wilid_full)
 
 plot.lu <- read_csv("./data/plot_lookup_master.csv",col_types = "ccccc")
 
@@ -295,6 +297,8 @@ w_ht <- bind_rows(w_ht, w_ht01_17) %>%
   distinct()
 
 ### these files have no species id
+
+
 
 ```
 
@@ -598,7 +602,6 @@ sprcag.files.ht %>%
 
 ```
 
-
 ```{r}
 sprcag.files.ht %>% 
   mutate(yr = as.integer(yr)) %>% 
@@ -621,6 +624,14 @@ prod.files <- files_prod_01_15 %>%
 
 prod.files %>% 
   glimpse()
+
+enframe(files_prod_01_15) %>%
+  rename(path = name) %>% 
+  select(-value) %>%
+  separate(data = ., col = path, into = c("f1","f2","f3","f4","prod_file"), sep = "/", remove = FALSE) %>% 
+  select(-starts_with("f")) %>% 
+  gt()
+
 
 prod.files.ht <- prod.files %>%
   mutate(season = "fall") %>% 
@@ -1103,12 +1114,15 @@ p19 <- p19 %>%
   mutate(yr = '2019') %>% 
   mutate(season = "fall")
 
+p19 %>% 
+  tabyl(wilid, site)
+
 ```
 
 ```{r}
 ## Select subset and type cast
 p19sel <- p19 %>% 
-  select(file_name, sheet_name, yr, season, site, plot, wilid, pl_ht_cm) 
+  select(file_name, sheet_name, spp, yr, season, site, plot, wilid, pl_ht_cm) 
 
 p19sel <- p19sel %>% 
   mutate(plot = if_else(condition = (is.na(plot)), true = "obs", plot)) 
@@ -1122,6 +1136,29 @@ p19sel <- p19sel %>%
                           site == "cresc" ~ "crescent",
                           TRUE ~ site))
 
+
+# prep species lookup
+lu.wilid.spp.v3 <- lu.wilid.spp.v2 %>% 
+  separate(col = wilid_full, into = c("site","plot", "wilid"),sep = "-",remove = FALSE)
+
+
+## create new spp lu
+lu.wilid.spp.v3 <- p19sel %>% 
+  select(file_name, site, yr, plot, wilid, spp) %>%
+  rename(species = spp) %>% 
+  filter(!is.na(wilid)) %>% 
+  distinct() %>%
+  mutate(wilid_full = paste0(site,"-",plot,"-", wilid)) %>% 
+  # distinct(site, plot) %>% datatable()
+  bind_rows(.,lu.wilid.spp.v3) %>% 
+  select(site, wilid, species, wilid_full) %>% 
+  distinct()
+
+lu.wilid.spp.v3 %>% 
+  filter(species == "NA") %>% 
+  gt() %>% 
+  tab_header(title = "missing species attributes", subtitle = "2019 production")
+
 p19sel <- p19sel %>% 
   filter(!(is.na(site) & is.na(pl_ht_cm)))
 
@@ -1131,6 +1168,10 @@ p19sel %>%
   tabyl(site, plot) %>% 
   gt()
 
+```
+
+
+```{r}
 # eliminate duplicate rows 
 p19sel <- p19sel %>%
   mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
@@ -1138,10 +1179,6 @@ p19sel <- p19sel %>%
   select(yr, season, site, plot, wilid, pl_ht_cm) %>% 
   distinct() 
 
-```
-
-
-```{r}
 p19sel %>% 
   ggTile_yr_season_site() +
   labs(caption = "p19.sel")
@@ -1630,10 +1667,32 @@ u19.ht <- u19.ht %>%
   mutate_if(.predicate = is.character,.funs=tolower)
 
 u19.ht <- u19.ht %>% 
-  select(-c(file_name, sheet_name, spp, stid)) %>% 
+  select(-c(file_name, sheet_name, stid)) %>% 
   distinct()
 
 ```
+
+#### update species lu
+```{r}
+
+## spp lu update
+# prep species lookup
+lu.wilid.spp.v3
+
+## create new spp lu
+lu.wilid.spp.v3 <- u19.ht %>% 
+  select(site, yr, plot, wilid, spp) %>%
+  rename(species = spp) %>% 
+  filter(!is.na(wilid)) %>% 
+  distinct() %>%
+  mutate(wilid_full = paste0(site,"-",plot,"-", wilid)) %>% 
+  # distinct(site, plot) %>% datatable()
+  bind_rows(.,lu.wilid.spp.v3) %>% 
+  select(site, wilid, species, wilid_full) %>% 
+  distinct()
+
+```
+
 
 ```{r, eval = FALSE}
 u19.ht %>%
@@ -2738,7 +2797,6 @@ plotly::ggplotly(gg.plty1)
 
 ```
 
-### Species and plot lu join
 
 ```{r}
 ## plt join
@@ -2749,43 +2807,9 @@ ht.combined <- ht.combined %>%
 ht.combined %>% 
   ggTile_yr_season_site2()
   
-
-ht.combined <- ht.combined %>% 
-  left_join(.,lu_wilid_full_spp, by = "wilid_full") 
-
-ht.combined <- ht.combined %>% 
-  left_join(.,plot.lu) %>% 
-  select(-treat)
-
-ht.combined %>% 
-  visdat::vis_dat()
-
-## join bv beav
-ht.combined <- ht.combined %>% 
-  left_join(., lu_site_beav) 
-
-ht.combined %>% visdat::vis_dat()
-
-ht.combined %>% 
-  group_by(yr, site, plot) %>% 
-  tally() %>% 
-  ggplot(aes(yr,site)) +
-  geom_tile(aes(fill = n)) +
-  facet_wrap(~plot)
-
-ht.combined %>% 
-  # mutate(wilid = str_remove(.$wilid, ".0"))
-  filter(is.na(species))
-
-ht.combined %>% visdat::vis_dat()
-
 ```
 
 ```{r}
-
-# ht.combined %>% 
-#   mutate(flag_high  = case_when())
-
 
 ht.combined <- ht.combined %>% 
   filter(!(yr == "2006" & pl_ht_cm == 460)) %>%
@@ -2871,7 +2895,7 @@ ht.combined <- ht.combined %>%
                           TRUE ~ plot)) %>% 
   mutate(site2 = paste0(site,"-",plot)) %>% 
   mutate(wilid_full = paste0(site2,"-",wilid)) %>% 
-  select(-c(species, spp_notes)) %>% 
+  # select(-c(species, spp_notes)) %>% 
   distinct()
 
 ```
@@ -3054,13 +3078,93 @@ summary.by.site2 %>%
 
 ```
 
+```{r}
+ht.combined %>% 
+  # filter(is.na(species)) %>% 
+  group_by(site, wilid, yr) %>% 
+  tally() %>% 
+  datatable(filter = "top")
+  
+```
+
+## Species and plot lu join
+```{r}
+
+lu.wilid.spp.v3 <- lu.wilid.spp.v3 %>% 
+  select(species, wilid_full) %>% 
+  mutate(species = case_when(species == "beb" ~ "bebb",
+                             species == "boothii" ~ "booth",
+                             species == "boothi" ~ "booth",
+                             species == "drum" ~ "drumm", 
+                             species == " NA" ~ "NA",
+                             species == "NA " ~ "NA",
+                             species == "na" ~ "NA",
+                             species == "plantifolia" ~ "plan",
+                             species == "planifolia" ~ "plan",
+                             species == "?" ~ "NA",
+                             TRUE ~ species
+                             ))
+
+lu.wilid.spp.v3 %>% 
+  distinct(species) %>% 
+  gt() %>% 
+  tab_header(title = "different species attributes")
+
+
+
+### lu.wilid.spp.v3
+# write_csv(lu.wilid.spp.v3, "./data/lu_wilid_full_spp_v3.csv")
+
+
+```
+
+```{r}
+### spp join on wilid ful
+ht.combined <- ht.combined %>% 
+  left_join(.,lu.wilid.spp.v3, by = "wilid_full")
+
+ht.combined <- ht.combined %>% 
+  left_join(.,plot.lu) %>% 
+  select(-treat)
+
+ht.combined %>% 
+  visdat::vis_dat()
+
+## join bv beav
+ht.combined <- ht.combined %>% 
+  left_join(., lu_site_beav) 
+
+ht.combined %>% visdat::vis_dat()
+
+ht.combined %>% 
+  group_by(yr, site, plot) %>% 
+  tally() %>% 
+  ggplot(aes(yr,site)) +
+  geom_tile(aes(fill = n)) +
+  facet_wrap(~plot)
+
+```
+
+
 ## Export
+```{r}
+
+ht.combined %>% 
+  # mutate(wilid = str_remove(.$wilid, ".0"))
+  filter(is.na(species))
+```
+
 
 ```{r, eval=FALSE}
-
 ht.combined %>%
   # select(-c(species, spp_notes)) %>% 
-  write_csv("./output/processed_data/ht_combined20191231_1142.csv")
+  write_csv("./output/processed_data/ht_combined20200107_1618.csv")
+
+```
+
+```{r}
+
+lu.wilid.spp.v3
 
 ```
 
