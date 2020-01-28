@@ -24,7 +24,6 @@ This section provides a basic interrogation of environmental measurement data ar
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(fs))
 suppressPackageStartupMessages(library(sf))
-# library(raster)
 suppressPackageStartupMessages(library(janitor))
 suppressPackageStartupMessages(library(readxl))
 suppressPackageStartupMessages(library(mapview))
@@ -33,16 +32,17 @@ suppressPackageStartupMessages(library(mapview))
 suppressPackageStartupMessages(library(viridis))
 library(ggExtra)
 library(DT)
-library(kableExtra)
 suppressPackageStartupMessages(library(lubridate))
 library(anytime)
-suppressPackageStartupMessages(library(compare))
+# suppressPackageStartupMessages(library(compare))
 suppressPackageStartupMessages(library(skimr)) ## some useful functions
 suppressPackageStartupMessages(library(dataMaid))
 
 ```
 
 ## Soil Moisture data 
+
+
 
 ### 2012-2015 Data (DCC Collection)
 
@@ -64,7 +64,7 @@ Two tabs describe the raw sensor and processed data (e.g., VWC)
 #   guess_max = min(1000, n_max))
 
 #  Get the names and paths. 
-list.files <- fs::dir_ls("data/raw/env_data_loggers",recursive = TRUE, glob = "*.xls")
+list.files <- fs::dir_ls("data/raw/env_data_loggers",recurse = TRUE, glob = "*.xls")
 
 ## Purrr: take list and read in first sheet of each folder
 env1 <- list.files %>%
