@@ -1,10 +1,16 @@
-# Environmental Logger Data 2012 - 2018
+---
+output: 
+  html_document: 
+    theme: readable
+---
+# Environmental Logger Data 2012 - 2019
 
 **Updated: `r format(Sys.time(), '%Y %B %d')`**
 
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
 ```
 
 
@@ -37,13 +43,16 @@ library(anytime)
 # suppressPackageStartupMessages(library(compare))
 suppressPackageStartupMessages(library(skimr)) ## some useful functions
 suppressPackageStartupMessages(library(dataMaid))
+library(visdat)
+library(gt)
+library(tsibble) ## ts
+library(feasts) ## ts
 
 ```
 
 ## Soil Moisture data 
 
-
-
+```{r}
 ### 2012-2015 Data (DCC Collection)
 
 ### 2012-2015 (DCC Collection)
@@ -53,10 +62,13 @@ suppressPackageStartupMessages(library(dataMaid))
 ### 2016 Data 
 
 #### Data import and initial inspection 
+```
 
-EM50 dataloggers have a particualr output format. Need to cleave off several of the top rows.
+
+EM50 dataloggers have a particular output format. Need to cleave off several of the top rows.
 Two tabs describe the raw sensor and processed data (e.g., VWC)
-```{r, eval=FALSE}
+
+```{r, eval=TRUE}
 
 # use 'readxls' functions
 # read_excel(path, sheet = NULL, range = NULL, col_names = TRUE,
@@ -73,14 +85,129 @@ env1 <- list.files %>%
   janitor::clean_names() 
 
 ```
-
-```{r, eval=FALSE, echo=FALSE}
-####
+# >
+```{r}
 env1 %>% 
-  # distinct(file) %>% 
-  separate(col = file, into = c("A1","A2","A3"), sep = " ",fill = "right") %>% 
-  head()
-# data/raw/env_data_loggers/
+  distinct(file) %>% 
+  datatable(caption = "Distinct decagon logger files to merge")
+```
+
+**158 distinct logger files to deal with...**
+
+```{r, eval=TRUE, echo=TRUE}
+
+####
+env1 <- env1 %>% 
+  mutate(date = excel_numeric_to_date(as.numeric(as.character(measurement_time)), date_system = "modern"))  %>%
+  mutate(yr = as.integer(year(date))) %>% 
+  mutate_at(vars(contains("temp")), as.numeric) %>% 
+  mutate_at(vars(contains("vwc")), as.numeric) %>% 
+  mutate(mm_precip = as.numeric(mm_precip)) %>% 
+  mutate_if(is.character, tolower) %>% 
+  select(-contains("none"))
+
+env1 %>% 
+  sample_n(10000) %>% 
+  vis_dat()
+
+env1 %>% 
+  distinct(file) %>% datatable()
+
+```
+
+```{r}
+# split 
+env1 <- env1 %>% 
+  separate(col = file, into = c("a1","a2","a3","a4","a5"), sep = "/",fill = "right", remove = FALSE) %>% 
+  select(-c(a1,a2,a3,a4)) %>%
+  # str_split(fruits, " and ")
+  mutate(file_n = str_remove(string = a5,pattern = ".xls")) 
+
+env1 <- env1 %>%
+  filter(!str_detect(file_n, "Arch")) %>% #filter out the "archived" files
+  mutate(file_n = str_replace(string = file_n,pattern = "-",replacement = " ")) %>% 
+  mutate(file_n = str_replace(string = file_n,pattern = "-",replacement = " ")) %>% 
+  # View()
+  # distinct(file_n) %>% datatable()
+  separate(col = file_n, into = c("site","datep","logger_info"),sep = " ",remove = FALSE) 
+
+
+env1 %>%
+  separate(col = logger_info, into = c("dloadd","logger_id"),sep = "-",remove = FALSE) 
+
+```
+
+```{r}
+## join in site plot info
+
+# env1 %>% 
+#   distinct(site) %>% 
+#   write_csv("./data/lu_em50_site_plot.csv")
+
+lu.em50 <- read_csv("./data/lu_em50_site_plot.csv")
+
+##
+env1 <- env1 %>% 
+  left_join(.,lu.em50,by='site') %>% 
+  mutate(site = site2) %>% 
+  select(-site2)
+
+env1 <- env1 %>% 
+  select(-contains('none')) %>% 
+  select(-c(a5))
+
+
+
+```
+
+```{r}
+
+env1 %>% 
+  tabyl(site,plot) %>% 
+  gt() 
+
+
+```
+
+no eb1 dc!
+
+```{r}
+env1 %>% 
+  sample_n(10000) %>% 
+  vis_dat()
+
+```
+
+```{r}
+
+env1 %>% 
+  tabyl(site, yr) %>% datatable(caption = "issues with date parsing at 'Rose'")
+
+env1 %>% 
+  tabyl(logger_id, yr) %>% datatable(caption = "issues with date parsing at 'Rose'")
+
+
+#### excel time fix
+env1 <- env1 %>% 
+  mutate(measurement_time = as.numeric(measurement_time)) %>%
+  mutate(measurement_time = janitor::excel_numeric_to_date(measurement_time, date_system = "modern", include_time = TRUE)) %>% 
+  mutate(doy = yday())
+
+env1 <- env1 %>% 
+  mutate(month = lubridate::month(measurement_time)) %>% 
+  mutate(hour = hour(measurement_time)) 
+
+env1 %>%
+  select(measurement_time) %>% 
+  head() %>% gt()
+
+```
+
+```{r}
+env1 %>% 
+  filter(plot != "obs") %>% 
+  ggpl
+
 ```
 
 
@@ -100,117 +227,30 @@ env1 <- env1 %>%
   mutate_at(.vars = c(3:11),.funs = as.numeric) 
 
 
-## fail. The x and y axes are crap....
+
 env1 %>% 
   ggplot(aes(measurement_time,m³m³vwc)) +
   geom_line() +
   facet_wrap(~file)
 
-# View(env1)
-# 
-# env1 %>% 
-#   head() %>% 
-#   mutate(m³m³vwc = as.numeric(m³m³vwc)) %>% 
-#   mutate(x = excel_numeric_to_date(x,date_system = "modern",include_time = TRUE))
-
-
-## This seems to work. But not in a mutate call for some reason
-# excel_numeric_to_date(as.numeric(env1$measurement_time), date_system = "modern", include_time = TRUE)
-
-# env1[["ExcelDateTime"]] <- excel_numeric_to_date(as.numeric(env1$measurement_time), date_system = "modern", include_time = TRUE)
-
-# View(env1)
-
-env1 %>%
-  mutate(ddd = as.character(ExcelDateTime))
-  head()
-  
-```
-
-
-
-```{r, eval=FALSE}
-
-######## scrap
-env1 %>% 
-  mutate(xxx = excel_numeric_to_date(as.numeric(measurement_time), date_system = "modern", include_time = TRUE))
-
-env1 %>% 
-  head() %>% 
+#env1 <- env1 %>%
   mutate(measurement_time = as.numeric(measurement_time)) %>%
   mutate(measurement_time = janitor::excel_numeric_to_date(measurement_time, date_system = "modern", include_time = TRUE))
 
-env1 %>% 
-  # distinct(file) %>% 
-  separate(file, into = c("pa","pb","pc","pd","file.name"), sep = "/" ) %>%
-  select(-c(pa, pb, pc, pd)) %>% 
-  View()
+```
+
+```{r}
+# install.packages("tsibble")
+# library(tsibble)
 
 
-###### this ain't working
-env_list <- list.files %>%
-  map(read_excel, .id = "file", sheet = 1,skip = 2, col_types = "text") %>% 
-  janitor::clean_names() 
 
 ```
 
-
-
-```{r, eval=FALSE}
-##################### EXAMPLE #################################
-# Read a collection of files into one data frame.
-# 
-# dir_ls() returns a named vector, so it can be used directly with purrr::map_df(.id).
-
-# Create separate files for each species
-iris %>%
-  split(.$Species) %>%
-  map(select, -Species) %>%
-  iwalk(~ write_tsv(.x, paste0(.y, ".tsv")))
-
-# Show the files
-iris_files <- dir_ls(glob = "*.tsv")
-iris_files
-#> setosa.tsv     versicolor.tsv virginica.tsv
-
-
-# Read the data into a single table, including the filenames
-iris_files %>%
-  map_df(read_tsv, .id = "file", col_types = cols(), n_max = 2)
-
-file_delete(iris_files)
-
-```
-
-
-### 2017 Data 
-#### Data import and initial inspection 
-
-
-### 2018 Data 
-#### Data import and initial inspection 
 
 ### Clean and Combine Years
 
 ### Export Archivable Version of Cleaned Data for Further Analysis 
 
 
-## Air Temperatures 
-### 2012-2015 Data (DCC Collection)
-
-#### Data import and initial inspection 
-
-
-### 2016 Data 
-#### Data import and initial inspection 
-
-### 2017 Data 
-#### Data import and initial inspection 
-
-
-### 2018 Data 
-#### Data import and initial inspection 
-
-### Clean and Combine Years
-
-### Export Archivable Version of Cleaned Data for Further Analysis
+#
