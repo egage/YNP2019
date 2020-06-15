@@ -13,6 +13,74 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 ```
 
+## Functions
+```{r}
+## functions
+### quick ref
+
+#- names to gt
+
+names2gt <- function(df){
+  names(df) %>% 
+    enframe() %>% 
+    gt() %>% 
+    tab_header(title = "field names")
+}
+
+### plotting
+
+#--doy vs vwc
+pl_temp_exp_doy <- function(df){
+  df %>% 
+  filter(temp_c > 0) %>% 
+  filter()
+  mutate(yr = as.factor(yr)) %>% 
+  ggplot(aes(doy,temp_c)) +
+  geom_line(aes(color = yr)) +
+  facet_grid(plot~site) +
+  theme_minimal() +
+  labs(x = "Day of year", y = "Volumetric water content")
+}
+
+#--doy vs vwc
+pl_vwc_doy1 <- function(df){
+  df %>% 
+  mutate(yr = as.factor(yr)) %>% 
+  ggplot(aes(doy,vwc)) +
+  geom_line(aes(color = yr)) +
+  facet_grid(plot~site) +
+  theme_minimal() +
+  labs(x = "Day of year", y = "Volumetric water content")
+}
+
+pl_vwc_doy2 <- function(df){
+  df %>% 
+  mutate(yr = as.factor(yr)) %>% 
+  ggplot(aes(doy,vwc)) +
+  geom_line(aes(color = yr)) +
+  facet_grid(site~plot) +
+  theme_minimal() +
+  labs(x = "Day of year", y = "Volumetric water content")
+}
+
+
+pl_vwc_date <- function(df){
+  df %>% 
+  mutate(yr = as.factor(yr)) %>% 
+  ggplot(aes(measurement_time,vwc)) +
+  geom_line(aes(color = var_vwc)) +
+  facet_wrap(~year, scales = "free_x") +
+  theme_minimal() +
+  labs(x = "Day of year", y = "Volumetric water content")
+}
+
+#--annual time series
+
+
+### summary tables
+
+
+```
 
 ## Introduction
 
@@ -48,7 +116,17 @@ library(gt)
 library(tsibble) ## ts
 library(feasts) ## ts
 
+# install.packages("devtools")
+# devtools::install_github("twitter/AnomalyDetection")
+
+library(AnomalyDetection)
+
 ```
+
+```{r}
+
+```
+
 
 ## Soil Moisture data 
 
@@ -63,10 +141,6 @@ library(feasts) ## ts
 
 #### Data import and initial inspection 
 ```
-
-
-EM50 dataloggers have a particular output format. Need to cleave off several of the top rows.
-Two tabs describe the raw sensor and processed data (e.g., VWC)
 
 ```{r, eval=TRUE}
 
@@ -85,7 +159,7 @@ env1 <- list.files %>%
   janitor::clean_names() 
 
 ```
-# >
+
 ```{r}
 env1 %>% 
   distinct(file) %>% 
@@ -123,20 +197,44 @@ env1 <- env1 %>%
   # str_split(fruits, " and ")
   mutate(file_n = str_remove(string = a5,pattern = ".xls")) 
 
+# filter out the 'archived' files
 env1 <- env1 %>%
   filter(!str_detect(file_n, "Arch")) %>% #filter out the "archived" files
+  filter(!str_detect(file_n, "arch"))
+
+env1 <- env1 %>% #filter out the "archived" files
   mutate(file_n = str_replace(string = file_n,pattern = "-",replacement = " ")) %>% 
   mutate(file_n = str_replace(string = file_n,pattern = "-",replacement = " ")) %>% 
   # View()
   # distinct(file_n) %>% datatable()
   separate(col = file_n, into = c("site","datep","logger_info"),sep = " ",remove = FALSE) 
 
-
-env1 %>%
-  separate(col = logger_info, into = c("dloadd","logger_id"),sep = "-",remove = FALSE) 
+## to lower
+env1 <- env1 %>%
+  mutate_if(.predicate = is.character,.funs = tolower)
 
 ```
 
+```{r}
+env1 %>% 
+  # View()
+  tabyl(logger_info,site) %>% 
+  gt() %>% 
+  tab_header(title = "distinct file suffix and site")
+```
+
+```{r}
+env1 <- env1 %>% 
+  select(-contains('none')) %>% 
+  select(-c(a5))
+
+env1 %>% 
+  names2gt()
+
+```
+
+
+# Lookup join
 ```{r}
 ## join in site plot info
 
@@ -148,24 +246,40 @@ lu.em50 <- read_csv("./data/lu_em50_site_plot.csv")
 
 ##
 env1 <- env1 %>% 
-  left_join(.,lu.em50,by='site') %>% 
+  left_join(.,lu.em50,by='site') 
+
+# env1 %>%
+#   # distinct(site2)
+#   filter(is.na(site2)) %>% 
+#   distinct(file_n)
+
+## to addres the missing site2 attributes...
+env1 <- env1 %>%
+  mutate(site2 = case_when(file_n == "eb2obs 24oct2018 0841" ~ "eb2",
+                           file_n == "eb2obs 08jan2020 1758" ~ "eb2",
+                           TRUE ~ site2))
+
+env1 <- env1 %>% 
   mutate(site = site2) %>% 
   select(-site2)
 
 env1 <- env1 %>% 
-  select(-contains('none')) %>% 
-  select(-c(a5))
+  mutate(plot = case_when(is.na(plot) ~ "obs",
+                          TRUE ~ plot))
 
 
-
+env1 <- env1 %>% 
+  rename(logger_id = logger_info)
 ```
 
 ```{r}
 
-env1 %>% 
-  tabyl(site,plot) %>% 
+env1 %>%
+  # distinct(site)
+  # filter(is.na(site)) %>% 
+  # distinct(file) %>%  datatable()
+  tabyl(site,plot) %>%
   gt() 
-
 
 ```
 
@@ -179,35 +293,52 @@ env1 %>%
 ```
 
 ```{r}
-
 env1 %>% 
   tabyl(site, yr) %>% datatable(caption = "issues with date parsing at 'Rose'")
 
 env1 %>% 
   tabyl(logger_id, yr) %>% datatable(caption = "issues with date parsing at 'Rose'")
+```
 
+
+```{r}
 
 #### excel time fix
 env1 <- env1 %>% 
   mutate(measurement_time = as.numeric(measurement_time)) %>%
-  mutate(measurement_time = janitor::excel_numeric_to_date(measurement_time, date_system = "modern", include_time = TRUE)) %>% 
-  mutate(doy = yday())
+  mutate(measurement_time = janitor::excel_numeric_to_date(measurement_time, date_system = "modern", include_time = TRUE))
 
 env1 <- env1 %>% 
+  mutate(doy = lubridate::yday(measurement_time)) %>% 
   mutate(month = lubridate::month(measurement_time)) %>% 
-  mutate(hour = hour(measurement_time)) 
+  mutate(hour = lubridate::hour(measurement_time)) 
 
-env1 %>%
-  select(measurement_time) %>% 
-  head() %>% gt()
+
 
 ```
 
-```{r}
-env1 %>% 
-  filter(plot != "obs") %>% 
-  ggpl
 
+# rose 2050 and other issues with problem time stamps
+
+```{r}
+# probelm dates
+env1 %>% 
+  filter(!(yr>2001 & yr <2050)) %>% 
+  mutate(site_plot = paste0(site,"-",plot)) %>% 
+  distinct(file,site) %>%
+  # write_csv("env_sensor_date_issues_2qc.csv")
+  # filter(site == "rose") %>% 
+  datatable()
+
+```
+
+
+```{r}
+
+## clean
+env1 <- env1 %>% 
+  filter(yr>2001 & yr <2050) %>% 
+  mutate(site_plot = paste0(site,"-",plot))
 ```
 
 
@@ -219,7 +350,7 @@ list.files <- fs::dir_ls("data/raw/env_data_loggers/Aug 2017",recursive = TRUE, 
 ## Purrr: take list and read in first sheet of each folder
 env1 <- list.files %>%
   # map_df(read_excel, .id = "file", sheet = 1,skip = 2, col_types = c("text","date", "numeric", "numeric","numeric","numeric","numeric","numeric")) %>%
-  map_df(read_excel, .id = "file", sheet = 2,skip = 2) %>%
+  map_df(read_excel, .id = "file", sheet = 2, skip = 2) %>%
   # map_df(read_excel, .id = "file", sheet = 1,skip = 2, col_types = "text") %>% # have to specify the "text" otherwise it fubars the guessing of data types with the date
   janitor::clean_names() 
 
@@ -243,12 +374,676 @@ env1 %>%
 # install.packages("tsibble")
 # library(tsibble)
 
+```
+
+## tidy temp
+
+```{r}
+## tidy
+
+env1.temp.tidy <- env1 %>% 
+  pivot_longer(
+  cols = contains("temp"),
+  # cols = starts_with("temp"),
+  names_to = "var_temp",
+  values_to = "temp_c",
+  values_drop_na = TRUE
+ ) 
+
+env1.ppt.tidy <- env1.temp.tidy %>% 
+  select(-contains("vwc")) 
+
+
+env1.temp.tidy <- env1.temp.tidy %>% 
+  select(-contains("vwc")) %>% 
+  select(-c(datep, mm_precip)) 
+  
+env1.temp.tidy %>% 
+  names()
+
+env1.temp.tidy <- env1.temp.tidy %>%
+  # select(-file) %>% 
+  distinct()
+
+env1.temp.tidy <- env1.temp.tidy %>% 
+  filter(!is.na(temp_c)) %>% 
+  mutate(site_logger_id = paste0(site,"-",logger_id))
+
+```
+
+```{r, tidytempclean}
+
+env1.temp.tidy.clean <- env1.temp.tidy %>% 
+  filter(yr >2001)
+
+env1.temp.tidy.clean %>% 
+  sample_n(10000) %>% 
+  visdat::vis_dat()
+
+```
+
+```{r}
+env1.temp.tidy.clean %>% 
+  glimpse()
+  
+```
+
+
+
+## temp plots
+
+```{r}
+env1.temp.tidy %>% 
+  tabyl(site_logger_id,var_temp) %>% 
+  gt()
+```
+
+
+## April through September
+```{r, nest_temp}
+
+env1.temp.tidy.clean.dly <- env1.temp.tidy.clean %>% 
+  filter(temp_c > 0) %>% 
+  group_by(date, month, plot, site, site_plot, yr, var_temp) %>%
+  summarise(temp_c = median(temp_c, na.rm = TRUE))  
+  
+### nest
+temp.nest.site <- env1.temp.tidy.clean.dly %>%
+  filter(month > 4 & month < 11) %>% 
+  group_by(site_plot) %>% 
+  nest()
+
+### functions
+ggTempSite <- function(data){
+  data %>% 
+  ggplot(aes(date,temp_c)) +
+  geom_line(aes(color = var_temp)) +
+  geom_point(aes(color = var_temp)) +
+  # geom_point() +
+  facet_wrap(~yr, scale = "free_x", ncol = 2) +
+  theme_minimal() +
+  labs(x = "Date", x = "Temperature (deg C)")
+}
+
+ggTempSite_ncol1 <- function(data){
+  pt1 <- data %>% 
+  ggplot(aes(date,temp_c)) +
+  geom_line(aes(color = var_temp)) +
+  geom_point(aes(color = var_temp)) +
+  # geom_point() +
+  facet_wrap(~yr, scale = "free_x", ncol = 1) +
+  theme_minimal() +
+  labs(x = "Date", y = "Temperature (deg C)")
+}
+
+```
+
+```{r}
+temp.nest.site <- temp.nest.site %>%
+  mutate(ggp_site = map(.x = data, .f = ggTempSite)) %>% 
+  mutate(ggp_siteb = map(.x = data, .f = ggTempSite_ncol1)) 
+
+temp.nest.site %>% 
+  pluck(4) %>% 
+  pluck(2)
+  
+# map2(paste0(plots$country, ".pdf"), plots$plot, ggsave)
+
+
+```
+
+```{r, eval = FALSE}
+## write plots
+map2(paste0(temp.nest.site$site_plot,"_soiltemp",".png"), temp.nest.site$ggp_site, ggsave)
+
+map2(paste0(temp.nest.site$site_plot,"_soiltemp_alt",".png"), temp.nest.site$ggp_siteb, ggsave)
+
+```
+
+
+# >>>v
+```{r}
+## reclass the temp var
+env1.temp.tidy %>% 
+  mutate(var_temp2 = case_when(var_temp == 'c_temp_3' ~ "temp_d1",
+                               var_temp == 'c_temp_4' ~ "temp_d2",
+                               var_temp == 'c_temp_5' ~ "temp_d1",
+                               TRUE ~ var_temp))
+  #                              c_temp_5	c_temp_6	c_temp_7	c_temp_8	temp_c_3	temp_c_4	temp_c_5	temp_c_6))
+  # mutate(var_vwc = case_when(var_vwc == "m³m³vwc_2" ~ "vwc_d1",
+  #                             var_vwc == "m³m³vwc_4" ~ "vwc_d2",
+  #                             var_vwc == "m³m³vwc_3" ~ "vwc_d1",
+  #                             var_vwc == "m³m³vwc_5" ~ "vwc_d2",
+  #                             var_vwc == "m³m³vwc_6" ~ "vwc_d1",
+  #                             var_vwc == "m³m³vwc_7" ~ "vwc_d2",
+  #                             TRUE ~ var_vwc)) 
+
+```
+
+
+
+## tidy vwc
+
+### anomoly detection
+```{r, eval=FALSE}
+env1 %>%
+  tabyl(site, yr) %>% 
+  gt() %>% 
+  tab_header(title = "Count of records by year in timestamp")
+
+# env1 %>% distinct(site_plot)
+
+#  https://github.com/twitter/AnomalyDetection
+
+data(raw_data)
+res = AnomalyDetectionTs(raw_data, max_anoms=0.02, direction='both', plot=TRUE)
+res$plot
+
+```
+
+
+```{r}
+## tidy
+env1.vwc.tidy <- env1 %>% 
+  pivot_longer(
+  cols = contains("vwc"),
+  # cols = starts_with("temp"),
+  names_to = "var_vwc",
+  values_to = "vwc",
+  values_drop_na = TRUE
+ ) 
+
+env1.vwc.tidy <- env1.vwc.tidy %>% 
+  select(-contains("temp")) %>% 
+  select(-c(datep)) 
+
+env1.vwc.tidy <- env1.vwc.tidy %>%
+  # select(-file) %>% 
+  # distinct() %>%
+  mutate(site_logger_id = paste0(site,"-",logger_id))
+
+## !!!
+env1.vwc.tidy <- env1.vwc.tidy %>% 
+  mutate(var_vwc2 = case_when(var_vwc == "m³m³vwc_2" ~ "vwc_d1",
+                              var_vwc == "m³m³vwc_4" ~ "vwc_d2",
+                              var_vwc == "m³m³vwc_3" ~ "vwc_d1",
+                              var_vwc == "m³m³vwc_5" ~ "vwc_d2",
+                              var_vwc == "m³m³vwc_6" ~ "vwc_d1",
+                              var_vwc == "m³m³vwc_7" ~ "vwc_d2",
+                              TRUE ~ var_vwc)) 
+env1.vwc.tidy %>% 
+  tabyl(var_vwc2)
+
+
+```
+
+## VWC plots
+
+```{r}
+
+
+
+```
+
+```{r}
+# env1.vwc.tidy  %>% 
+#   tabyl(site,var_vwc) %>% 
+#   gt()
+```
+
+
+```{r}
+# 
+env1.vwc.tidy %>%
+  # distinct(var_vwc)
+  filter(vwc < .65 & vwc > .05) %>% 
+  filter(var_vwc2 == "vwc_d1") %>% 
+  filter(plot != "obs") %>% 
+  pl_vwc_doy1 +
+  labs(title = "Sensor depth 1")
+
+env1.vwc.tidy %>%
+  # distinct(var_vwc)
+  filter(vwc < .65 & vwc > .05) %>% 
+  filter(var_vwc2 == "vwc_d2") %>% 
+  filter(plot != "obs") %>% 
+  pl_vwc_doy1 +
+  labs(title = "Sensor depth 2")
+
+
+```
+
+```{r}
+env1.vwc.tidy %>% 
+  filter(var_vwc2 == "vwc_d2") %>%
+  filter(vwc < .65 & vwc > .05) %>% 
+  # sample_n(50000)
+  filter(plot != "obs") %>% 
+  pl_vwc_doy2
+
+
+```
+
+# for DM
+```{r}
+## file info
+env1.vwc.tidy %>% 
+  distinct(file) %>%
+  write_csv("./output/env_data_4DM/list_of_decagon_files.csv")
+
+env1.precip.tidy %>% 
+  distinct(file) %>%
+  gt() %>% 
+  tab_header(title = "Raw environmental data logger files")
+
+```
+
+#### precip only
+```{r}
+## just the precip
+env1.precip.tidy <- env1.vwc.tidy %>% 
+  filter(!is.na(mm_precip))
+
+## pull out precip
+env1.precip.tidy <- env1.precip.tidy %>% 
+  dplyr::select(-c(vwc, var_vwc, var_vwc2)) %>% 
+  distinct()
+
+env1.precip.tidy %>% 
+  distinct()
+
+## overview
+env1.precip.tidy %>% 
+  visdat::vis_dat(warn_large_data = FALSE)
+# ggsave("./output/env_data_4DM/decagon_precip_overview.png", width = 6, height = 6, dpi = 200)  
+
+##
+ppt_qaqcplot <- env1.precip.tidy %>%
+  ggplot(aes(x = doy, y = mm_precip)) +
+  geom_line(aes(color = site_logger_id)) +
+  geom_point(aes(color = site_logger_id)) +
+  facet_wrap(~site_plot, scales = "free_y", ncol = 2)
+
+env1.precip.tidy %>%
+  mutate(yr = as_factor(yr)) %>% 
+  ggplot(aes(x = doy, y = mm_precip)) +
+  geom_line(aes(color = yr)) +
+  # geom_point(aes(color = yr)) +
+  facet_wrap(~site_logger_id, scales = "free_y", ncol = 2) +
+  theme_minimal()
+ggsave("./output/env_data_4DM/decagon_precip_line_plot4qaqc.pdf", width = 8, height = 18)
+
+## write to csv for DM
+env1.precip.tidy %>%
+  write_csv("./output/env_data_4DM/decagon_precip_tidy_uncleaned.csv")
 
 
 ```
 
 
-### Clean and Combine Years
+```{r}
+vwc.tidy <- env1.vwc.tidy %>% 
+  dplyr::select(-c(mm_precip))
+
+## write to csv for DM
+vwc.tidy %>%
+  write_csv("./output/env_data_4DM/decagon_vwc_tidy_uncleaned.csv")
+
+
+env1.vwc.tidy %>% 
+  select(var_vwc,var_vwc2,vwc,file_n)
+  names()
+```
+
+
+```{r}
+env1.vwc.tidy %>%
+  filter(plot != "obs") %>% 
+  ggplot(aes(measurement_time,vwc)) +
+  geom_line(aes(color = var_vwc)) +
+  facet_wrap(~site_logger_id, ncol = 4)
+
+```
+
+#### soil temp
+```{r, eval=FALSE}
+env1.temp.tidy.clean %>% 
+  write_csv("./output/env_data_4DM/soil_temp/decagon_soiltemp_uncleaned.csv")
+  
+
+env1.temp.tidy.clean <- env1.temp.tidy.clean %>%
+  # names()
+  group_by(logger_id, site, var_temp) %>% 
+  mutate(zscore = scale(temp_c)) 
+
+
+```
+
+
+# ! lots of f-up dates. Here are 
+```{r}
+# env1.vwc.tidy %>%
+#   filter(yr < 2003) %>% 
+#   tabyl(file) %>% 
+#   gt()
+
+```
+
+### clean
+
+```{r}
+
+env1.vwc.tidy.clean <- env1.vwc.tidy %>% 
+  filter(yr > 2003) %>%
+  filter(vwc < .9 & vwc > 0.05)
+
+```
+
+
+```{r, eval=FALSE}
+library(anomalize) #tidy anomaly detectiom
+library(tidyverse) #tidyverse packages like dplyr, ggplot, tidyr
+library(coindeskr) #bitcoin price extraction from coindesk
+
+# devtools::install_github('business-science/anomalize')
+
+btc <- get_historic_price(start = "2017-01-01")
+
+btc_ts <- btc %>% rownames_to_column() %>% as.tibble() %>% 
+  mutate(date = as.Date(rowname)) %>% select(-one_of('rowname'))
+
+btc_ts %>% 
+  time_decompose(Price) %>%
+  anomalize(remainder) %>%
+  time_recompose() %>%
+  plot_anomalies(time_recomposed = TRUE, ncol = 3, alpha_dots = 0.5)
+
+btc_ts %>% 
+  time_decompose(Price, method = "stl", frequency = "auto", trend = "auto") %>%
+  anomalize(remainder, method = "gesd", alpha = 0.05, max_anoms = 0.2) %>%
+  plot_anomaly_decomposition() 
+
+btc_ts %>% 
+  time_decompose(Price) %>%
+  anomalize(remainder) %>%
+  time_recompose() %>%
+  filter(anomaly == 'Yes') 
+
+env1.vwc.tidy %>% 
+  # distinct(site_logger_id)
+  filter(site_logger_id == "eb1-1307") %>% 
+  # distinct(var_vwc)
+  filter(var_vwc == "m³m³vwc_2") %>% 
+  time_decompose(vwc) %>%
+  anomalize(remainder) %>%
+  time_recompose() %>%
+  plot_anomalies(time_recomposed = TRUE, ncol = 3, alpha_dots = 0.5)
+
+
+
+```
+
+
+```{r}
+
+env1.vwc.tidy.clean %>% 
+  # glimpse()
+  filter(site_logger_id == "eb1-1307") %>%
+  # filter(site == "eb1") %>%
+  filter(var_vwc == "m³m³vwc_2") %>% 
+  ggplot(aes(measurement_time,vwc)) +
+  geom_line(color = "blue", alpha = .2) +
+  geom_point(color = "lightblue", alpha = .8) +
+  theme_minimal() +
+  facet_wrap(~yr)
+
+env1.vwc.tidy.clean.dly <- env1.vwc.tidy.clean %>% 
+  group_by(date, month, plot, site, site_plot, yr, var_vwc) %>%
+  summarise(vwc = median(vwc, na.rm = TRUE))
+
+```
+
+```{r}
+env1.vwc.tidy.clean.dly %>% 
+  # filter(site_logger_id == "eb1-1307") %>% 
+  # filter(var_vwc == "m³m³vwc_2") %>% 
+  filter(site == "eb1") %>% 
+  ggplot(aes(date,vwc)) +
+  geom_line(aes(color = var_vwc)) +
+  # geom_point() +
+  facet_wrap(~yr, scale = "free_x", ncol = 2)
+
+env1.vwc.tidy.clean %>%
+  filter(month > 4 & month < 10) %>% 
+  filter(plot != "obs") %>%
+  filter(vwc <.56) %>%
+  filter(yr > 2009) %>% 
+  group_by(yr, site, date, doy, var_vwc) %>% 
+  summarise(vwc = median(vwc)) %>% 
+  ggplot(aes(doy,vwc)) +
+  geom_line(aes(color = var_vwc)) +
+  labs(x = "Day of year", y = "Volumetric water content") +
+  # geom_point() +
+  facet_grid(yr~site)
+ggsave("vwc_exp_facet.png", width = 9.5, height = 6.15)
+
+```
+
+```{r, eval=FALSE}
+library(tsibble)
+as_tsibble(x = env1.vwc.tidy.clean)
+
+```
+
+
+### Nested vwc
+
+## April through September
+```{r, nest_vwca}
+vwc.nest1 <- env1.vwc.tidy.clean.dly %>%
+  filter(month > 4 & month < 11) %>% 
+  group_by(site_plot) %>% 
+  nest()
+
+# vwc.nest1 %>% 
+#   # mutate(plot = map)
+#   pluck(2) %>% 
+#   pluck(2)
+
+ggVWCsite <- function(data){
+  data %>% 
+  ggplot(aes(date,vwc)) +
+  geom_line(aes(color = var_vwc)) +
+  geom_point(aes(color = var_vwc)) +
+  # geom_point() +
+  facet_wrap(~yr, scale = "free_x", ncol = 2) +
+  theme_minimal()
+}
+
+ggVWCsite_ncol1 <- function(data){
+  pt1 <- data %>% 
+  ggplot(aes(date,vwc)) +
+  geom_line(aes(color = var_vwc)) +
+  geom_point(aes(color = var_vwc)) +
+  # geom_point() +
+  facet_wrap(~yr, scale = "free_x", ncol = 1) +
+  theme_minimal() +
+  labs(x = "Date", y = "Volumetric water content")
+}
+
+
+vwc.nest1 <- vwc.nest1 %>%
+  mutate(ggp_site = map(.x = data, .f = ggVWCsite)) %>% 
+  mutate(ggp_siteb = map(.x = data, .f = ggVWCsite_ncol1)) 
+
+
+vwc.nest1 %>% 
+  pluck(4) %>% 
+  pluck(3)
+  
+# map2(paste0(plots$country, ".pdf"), plots$plot, ggsave)
+
+
+
+```
+
+```{r, eval=FALSE}
+## save
+map2(paste0(vwc.nest1$site_plot,"_alt1",".png"), vwc.nest1$ggp_site, ggsave,)
+map2(paste0(vwc.nest1$site_plot,"_ncol1",".png"), vwc.nest1$ggp_siteb, ggsave)
+```
+
+
+```{r, eval=FALSE}
+
+dat = data.frame(elev = round( runif(20, 100, 500), 1),
+                 resp = round( runif(20, 0, 10), 1),
+                 grad = round( runif(20, 0, 1), 2),
+                 slp = round( runif(20, 0, 35),1),
+                 lat = runif(20, 44.5, 45),
+                 long = runif(20, 122.5, 123.1),
+                 nt = rpois(20, lambda = 25) )
+head(dat)
+
+response = names(dat)[1:3]
+
+expl = names(dat)[4:7]
+
+response = set_names(response)
+response
+
+expl = set_names(expl)
+expl
+
+scatter_fun = function(x, y) {
+     ggplot(dat, aes(x = .data[[x]], y = .data[[y]]) ) +
+          geom_point() +
+          geom_smooth(method = "loess", se = FALSE, color = "grey74") +
+          theme_bw() +
+          labs(x = x,
+               y = y)
+}
+
+scatter_fun = function(x, y) {
+     ggplot(dat, aes_string(x = x, y = y ) ) +
+          geom_point() +
+          geom_smooth(method = "loess", se = FALSE, color = "grey74") +
+          theme_bw() 
+}
+
+scatter_fun("lat", "elev")
+
+elev_plots = map(expl, ~scatter_fun(.x, "elev") )
+elev_plots
+
+all_plots = map(response,
+                ~map(expl, scatter_fun, y = .x) )
+
+all_plots$grad[1:2]
+all_plots$grad$long
+all_plots[[3]][[3]]
+
+# pdf("all_scatterplots.pdf")
+# all_plots
+# dev.off()
+
+plotnames = imap(all_plots, ~paste0(.y, "_", names(.x), ".png")) %>%
+     flatten()
+plotnames
+
+walk2(plotnames, flatten(all_plots), ~ggsave(filename = .x, plot = .y, 
+                                             height = 7, width = 7))
+```
+
+
+
+```{r, nest_vwc}
+vwc.nest2 <- env1.vwc.tidy.clean.dly %>%
+  group_by(site, plot) %>% 
+  nest()
+
+# vwc.nest1 %>% 
+#   # mutate(plot = map)
+#   pluck(2) %>% 
+#   pluck(2)
+
+ggVWCsite_plot <- function(data){
+  data %>% 
+  ggplot(aes(date,vwc)) +
+  geom_line(aes(color = var_vwc)) +
+  geom_point(aes(color = var_vwc)) +
+  # geom_point() +
+  facet_wrap(~yr, scale = "free_x", ncol = 3) +
+  theme_minimal() +
+  labs(x = "Date", y = "Volumetric water content")
+}
+
+vwc.nest2 <- vwc.nest2 %>%
+  mutate(ggp_site = map(.x = data, .f = ggVWCsite_plot)) 
+
+vwc.nest2 %>% 
+  pluck(4) %>% 
+  pluck(3)
+  
+
+
+```
+
+```{r, eval = FALSE}
+# map2(paste0(plots$country, ".pdf"), plots$plot, ggsave)
+
+## save
+map2(paste0(vwc.nest2$site_plot,"_nest2",".pdf"), vwc.nest1$ggp_site, ggsave)
+# map2(paste0(vwc.nest1$site_plot,"_ncol1",".png"), vwc.nest1$ggp_siteb, ggsave)
+```
+
+
+```{r}
+
+env1.vwc.tidy %>%
+  # distinct(site)
+  filter(site == "eb2") %>% 
+  # filter(plot != "obs") %>% 
+  ggplot(aes(measurement_time,vwc)) +
+  geom_point(aes(color = var_vwc)) +
+  facet_wrap(~site, ncol = 4)
+
+wvc.median <- env1.vwc.tidy %>%
+  filter(vwc < .65 & vwc > .05) %>%
+  group_by(var_vwc,date, site,plot, yr) %>%
+  summarise(vwc_median = median(vwc,na.rm = TRUE), vwc_max = max(vwc,na.rm = TRUE), vwc_range = IQR(vwc))
+
+
+wvc.median %>% 
+  filter(site == "elk") %>% 
+  filter(plot != "obs") %>% 
+  ggplot(aes(date,vwc_max)) +
+  geom_point(aes(color = var_vwc)) +
+  facet_wrap(~yr, ncol = 4, scales = "free_x")
+
+```
+
+
+```{r, eval=FALSE}
+env1.vwc.tidy %>% 
+  filter(plot != "obs") %>% 
+  filter(yr != 2050) %>% 
+  mutate(yr = as.factor(yr)) +
+  ggplot(aes(doy,vwc)) +
+  geom_line(aes(color = yr)) +
+  facet_grid(plot~site)
+
+env1.vwc.tidy %>% 
+  filter(plot != "obs") %>% 
+  filter(yr != 2050) %>% 
+  mutate(yr = as.factor(yr)) +
+  ggplot(aes(doy,vwc)) +
+  geom_line(aes(color = yr)) +
+  facet_grid(plot~site)
+
+           
+```
+
 
 ### Export Archivable Version of Cleaned Data for Further Analysis 
 

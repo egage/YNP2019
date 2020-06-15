@@ -80,9 +80,30 @@ log.dat %>%
 ```
 
 ```{r}
+
+log.dat <- log.dat %>% 
+  mutate_if(.predicate = is.character,.funs = tolower)
+
+log.dat %>% 
+  head() %>% View()
+
+
+
+```
+
+
+```{r}
 dly.mean <- log.dat %>% 
   group_by(site,site_logger, wat_id2, date) %>% 
   summarise(mean.dly.abslevel = mean(abslevel,na.rm = TRUE), mean.water_column_m = mean(water_column_m, na.rm = TRUE))
+
+
+dly.mean <- dly.mean %>% 
+  mutate(plot = case_when(str_detect(site, "cc") ~ "cc",
+                          str_detect(site, "dc") ~ "dc",
+                          str_detect(site, "dx") ~ "dx",
+                          str_detect(site, "cx") ~ "cx",
+                          TRUE ~ "obs"))
 
 ## add in year and mob=nth columns
 dly.mean <- dly.mean %>% 
@@ -91,35 +112,71 @@ dly.mean <- dly.mean %>%
   mutate(doy = lubridate::yday(date)) %>% 
   mutate(doy.d = format(date, format="%m-%d"))
 
+```
+
+```{r}
 
 dly.mean %>% 
+  mutate(mean.water_column_m = mean.water_column_m*-1) %>% 
+  filter(plot != "obs") %>% 
   ggplot(aes(x=date,y=mean.water_column_m)) +
-  geom_line(aes(color=site_logger)) +
-  labs(title = "Mean daily 'water_column_m' values") +
-  facet_wrap(~site)
+  # geom_line(aes(color=site_logger)) +
+  geom_line(color="blue") +
+  geom_hline(yintercept = 0, color = "red", lty = "dashed") +
+  # labs(title = "Mean daily 'water_column_m' values") +
+  facet_wrap(~site) +
+  theme_minimal() +
+  labs(x = "Date", y = "Water table elevation (m)")
+# ggsave("waterlevel_loggers_exp-alt.png", width = 8.5, height = 6)
 
 dly.mean %>% 
+  filter(plot != "obs") %>% 
   ggplot(aes(x=date,y=mean.dly.abslevel)) +
   geom_line(color="blue") +
-  labs(title = "Mean daily 'abslevel' values") +
-  facet_wrap(~site, scales = "free_y")
+  # labs(title = "Mean daily 'abslevel' values") +
+  facet_wrap(~site, scales = "free_y") +
+  theme_minimal() +
+  labs(x = "Date", y = "Water table elevation (m)")
+# ggsave("waterlevel_loggers_exp.png", width = 8.5, height = 6)
 
-  
+
+```
+
+
+```{r, fig.height=15}
+## plot daily traces
+
+dly.mean %>% # names()
+  filter(plot != "obs") %>%
+  filter(month > 2 & month < 10) %>% 
+  mutate(yr = as.factor(yr)) %>% 
+  # ggplot(aes(x=doy,y=mean.water_column_m)) +
+  ggplot(aes(x=doy,y=mean.dly.abslevel)) +
+  geom_line(aes(color=yr)) +
+  labs(x = "Day of year", y = "Water table elevation (m)") +
+  # labs(title = "Mean daily 'water_column_m' values") +
+  facet_wrap(~site_logger, scale = 'free_y', ncol = 3) +
+  theme_minimal()
+# ggsave("waterlevel_loggers_exp_alt2.png", width = 8.5, height = 6)
+
 ```
 
 ```{r, fig.height=15}
 ## plot daily traces
 
 dly.mean %>% # names()
+  filter(plot != "obs") %>%
+  filter(yr != "2012") %>% 
   filter(month > 2 & month < 10) %>% 
   mutate(yr = as.factor(yr)) %>% 
   # ggplot(aes(x=doy,y=mean.water_column_m)) +
   ggplot(aes(x=doy,y=mean.dly.abslevel)) +
   geom_line(aes(color=yr)) +
-  labs(title = "Mean daily 'water_column_m' values") +
+  labs(x = "Day of year", y = "Water table elevation (m)") +
+  # labs(title = "Mean daily 'water_column_m' values") +
   facet_wrap(~site_logger, scale = 'free_y', ncol = 3) +
   theme_minimal()
-
+# ggsave("waterlevel_loggers_exp_alt2.png", width = 8.5, height = 6)
 
 ```
 
