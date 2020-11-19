@@ -24,15 +24,13 @@ opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'cente
 
 **Updated:** `r format(Sys.time(), '%d %B, %Y')`
 
-# Introduction  
+# Introduction
 
-This document evaluates willow height measurement data from project inception through 2019. Data include those archived on the "Digital Collections of Colorado" (DCC) library site and more recent (2015-2019) data. 
+This document evaluates willow height measurement data from project inception through 2019. Data include those archived on the "Digital Collections of Colorado" (DCC) library site and more recent (2015-2019) data.
 
-DCC links:  
-Plant level fall current annual growth and height on experimental plots in Yellowstone's Northern Range, 2002 - 2015: http://hdl.handle.net/10217/173649  
-Plant level fall current annual growth and height on observation plots in Yellowstone's Northern Range, 2008 - 2015: http://hdl.handle.net/10217/173657
-
-
+DCC links:\
+Plant level fall current annual growth and height on experimental plots in Yellowstone's Northern Range, 2002 - 2015: <http://hdl.handle.net/10217/173649>\
+Plant level fall current annual growth and height on observation plots in Yellowstone's Northern Range, 2008 - 2015: <http://hdl.handle.net/10217/173657>
 
 ```{r,echo=FALSE}
 suppressPackageStartupMessages(library(tidyverse))
@@ -57,9 +55,10 @@ library(lubridate)
 library(gt)
 ```
 
-# Data Import and Initial Processing
+# Setup
 
 ## Functions
+
 ```{r, functs}
 
 read_sheets <- function(file){
@@ -212,8 +211,8 @@ gt_tally_site_plot_yr_season <- function(df){
 
 ```
 
-### Table functions
 ```{r}
+### Table functions
 ## gt field names
 names.gt <- function(df){
   df %>% 
@@ -230,8 +229,8 @@ names.dt <- function(df){
 
 ```
 
-
 ## Lookup tables
+
 ```{r}
 
 ## wilid_full spp lookup
@@ -260,19 +259,10 @@ lu_spp_site2 <- read_csv("./data/lu_spp_site2.csv")
 
 ```
 
-## willow id
-
-### geospatial
-
-```{r}
-
-```
-
-
-
-
+# Data import and wrangling
 
 ## DCC
+
 ```{r, message=FALSE, warning=FALSE}
 
 ## revised 20180228
@@ -299,35 +289,35 @@ w_ht %>%
   labs(caption = "data/raw/ht/2016_2017_Data_Entry_Format_WillowHt_2001_2015.xlsx") +
   theme(axis.text.x = element_text(angle = 55, hjust = 1))
 
+## yet another file possibly with data...
 w_ht01_17 <- read_excel("data/raw/ht/WillowHt_2001_2017_QAQCd_Version.xlsx")
 
 w_ht <- bind_rows(w_ht, w_ht01_17) %>% 
   # select(-c(ID, exp, dam, browse)) %>% 
   filter(plantht != "NA") %>%
   rename(pl_ht_cm = plantht) %>% 
-  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
-  distinct()
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>%   distinct()
 
+## one of hundreds of differences between files: willid vs wilid. For constincy with latter files, I will go with wilid
+w_ht <- w_ht %>% 
+  rename(wilid = willid)
 ### these files have no species id
-
-
-
 ```
 
 > Interogating other raw files looking for spring data
 
-```{r}
+```{r, eval=FALSE}
 w_ht01_17 %>% 
   group_by(year, season, site) %>%
   tally() %>% 
   ggplot(aes(as.character(year), season)) +
   geom_tile(aes(fill = n)) +
   labs(caption = "WillowHt_2001_2017_QAQCd_Version.xlsx")
-
+# > Still missing spring data...
 ```
-> Still missing spring data...
 
 ### Raw DCC spring
+
 ```{r}
 ## MORE SPRING DATA?!
 ## the experimental
@@ -390,7 +380,6 @@ nsf.ht.spr %>%
 
 ```
 
-
 ### Raw DCC fall
 
 ```{r}
@@ -414,14 +403,7 @@ nsf.ht.fa.expobs <- bind_rows(nsf.ht.fa.exp, nsf.ht.fa.obs) %>%
 dcc.ht.fa.spr <- bind_rows(nsf.ht.fa.expobs, nsf.ht.spr) %>%
   mutate(wilid = as.character(wilid)) %>% 
   distinct()
-
-dcc.ht.fa.spr %>% 
-  mutate(site2 = paste0(site,"-",plot)) %>% 
-  ggTile_yr_season_site2() +
-  labs(caption = "dcc.ht.fa.spr")
-
 ```
-
 
 ```{r}
 
@@ -499,12 +481,18 @@ dcc.ht.fa.spr <- dcc.ht.fa.spr %>%
 ```
 
 ```{r}
+dcc.ht.fa.spr %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  ggTile_yr_season_site2() +
+  labs(caption = "dcc.ht.fa.spr")
+```
+
+```{r}
 ### w_ht issue
 
 w_ht <- w_ht %>%
   filter(pl_ht_cm != "na" & pl_ht_cm != "missing" & pl_ht_cm != "NA") %>% 
   mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
-  rename(wilid = willid) %>% 
   mutate(wilid_full = paste0(wilid,"=", site)) 
 
 ## don't think I need this bc use of lu
@@ -547,10 +535,9 @@ w_ht %>%
 
 ```
 
+### Data files from Tom
 
-### Data files from Tom 
-
-WillowHt_2001_2015.csv
+TH provided a separate file with data 2001-2015 data. Unclear how this was developed or how it is supposed to relate to either the DCC or records gathered from the various prod and util files.
 
 ```{r}
 
@@ -578,9 +565,9 @@ th.01.15 %>%
 
 ```
 
-No spring data here, except for 2001. 
+No spring data here, except for 2001.
 
-### Ht from sprcag*.csv files
+### Ht from sprcag\*.csv files
 
 ```{r}
 ## see if there is data in the sprcag*.csv files
@@ -626,7 +613,8 @@ sprcag.files.ht %>%
 
 > Observation sites?
 
-### Ht from prod*.csv files
+### Ht from prod\*.csv files
+
 ```{r}
 files_prod_01_15 <- fs::dir_ls("./data/Yell_data_from_Hobbs_drive/Production all years", recurse = FALSE, glob = "*.csv")
 # regex
@@ -675,8 +663,8 @@ prod.sprcag.ht %>%
 
 ```
 
-# wilids from sprcag and prod files
 ```{r}
+# wilids from sprcag and prod files
 sprcag.files.ht %>% 
   distinct(season,site,plot,wilid) %>% 
   mutate(wilid = as.integer(wilid)) %>% 
@@ -690,192 +678,17 @@ prod.files.ht %>%
   mutate(wilid = as.integer(wilid)) %>% 
   arrange(wilid) %>% 
   datatable(rownames = FALSE, filter = 'bottom')
+
+# > Note: where are the obs sites?
+# 
+# > Error in files with eb4-cc?
 ```
 
->Note: where are the obs sites?
+## Yet another data file...
 
->Error in files with eb4-cc?
+File: 2016_2017_Data_Entry_Format_WillowHt_2001_2015.csv
 
-## 2016 Production
-
-
-# Wilid issue with st_replace
-```{r}
-p16.raw <- read_excel("./data/raw/production/2016_Raw_Production_20180421.xlsx", col_types = "text") %>% 
-  janitor::clean_names()
-
-## rename inconsistently named columns
-p16.raw <- p16.raw %>% 
-  rename(wilid = wildid) %>% 
-  rename(species = spp) %>% 
-  rename(pl_ht_cm = height_cm) %>%
-  mutate(season = "fall") %>% 
-  mutate(yr = as.character("2016"))
-
-## trim white space
-p16.raw <- p16.raw %>% 
-  mutate(wilid = str_trim(string = .$wilid))
-
-# coercing wilid to integer. This induces NA because of non-numeric entries (e.g., wilid = "?"). I assume these are to be culled
-p16.raw <- p16.raw %>% 
-  mutate(wilid = as.integer(wilid))
-
-## reconstitute wilid full
-p16.raw <- p16.raw %>% 
-  mutate(wilid_full = paste0(site,"-",plot,"-",wilid))
-
-```
-
-
-```{r}
-p16.raw %>% 
-  distinct(site, wilid) %>%
-  datatable(filter = 'top')
-```
-
-```{r}
-p16.raw %>% 
-  distinct(site, wilid) %>% 
-  arrange(site) %>% 
-  datatable(rownames = FALSE, caption = "Distinct wilid in raw 2016 production excel file:2016_Raw_Production_20180421.xlsx",filter = 'top')
-
-p16.raw %>% 
-  group_by(wilid) %>% 
-  summarise(n.distinct.sites = n_distinct(site))%>% 
-  datatable(rownames = FALSE, caption = "Count of sites for each wilid value in raw 2016 production excel file: 2016_Raw_Production_20180421.xlsx")
-
- 
-
-
-```
-
-```{r}
-p16.raw <- p16.raw %>% 
-  mutate(plot = if_else(is.na(plot),"obs",plot)) %>%
-  mutate(site2 = paste0(site, "-", "plot"))
-```
-
-
-```{r, eval=TRUE}
-# !!!! issue with wilid parsing!
-# p16.raw <- p16.raw %>% 
-#   mutate(wilid_full = str_trim(string = .$wilid_full)) %>%
-#   # mutate(wilid.test = str_remove(wilid, ".0")) %>% 
-#   mutate(wilid_full = str_sub(string = wilid_full,start =  1,-3))
-
-```
-
-
-```{r}
-### Break out height from shoot level fields (e.g., sht_len_1)
-
-p16.ht <- p16.raw %>%  
-  dplyr::select(c(yr, wilid_full, site2, wilid, site, plot, species, pl_ht_cm,stem_id, live, season, notes))
-
-
-# !!!! issue with wilid parsing!
-p16.ht <- p16.ht %>% 
-  mutate(wilid_full = str_trim(string = .$wilid_full)) %>%
-  # mutate(wilid.test = str_remove(wilid, ".0")) %>% 
-  mutate(wilid_full = str_sub(string = wilid_full,start =  1,-3))
-
-
-# p16.ht <- p16.ht %>% 
-#   left_join(., lu.wilid.spp.v2, by = "wilid_full") %>%
-#   mutate(species = case_when(is.na(species.x)~species.y,
-#                              is.na(species.y)~species.x,
-#                              TRUE ~ "NA")) %>% 
-#   select(-c(species.x, species.y))
-
-# p16.ht <- 
-#   p16.ht %>% 
-#   # filter(!is.na(pl_ht_cm)) %>% 
-#   filter(!is.na(wilid))
-
-p16.ht %>% 
-  visdat::vis_dat()
-
-# u16.ht %>% 
-#   filter(is.na(species))
-```
-
-
-```{r}
-p16.ht <- p16.ht %>%
-  # select(-c(species)) %>%
-  mutate(yr = as.character("2016")) %>%
-  mutate(season = "fall") %>%
-  distinct()
-  
-p16.ht %>%   
-  ggTile_yr_season_site() +
-  labs(caption = "p16.ht")
-
-```
-
-```{r}
-p16.ht %>% 
-  group_by(wilid_full, site, plot) %>% 
-  tally() %>% 
-  datatable()
-
-```
-
-```{r}
-
-p16.ht %>% 
-  tabyl(site)
-
-```
-
-
-## 2016 Utilization
-
-The following show what I know now: **NO SPRING DATA FOR 2016**
-```{r}
-# 2016 utilization
-u16.raw <- read_excel("./data/raw/utilization/Raw_2016_Utilization/2016_Raw_Utilization.xlsx", col_types = "text") %>% 
-  janitor::clean_names()
-
-u16.raw <- u16.raw %>%
-  rename(wilid = wildid) %>%
-  mutate(wilid = str_trim(string = .$wilid)) %>%
-  # mutate(wilid.test = str_remove(wilid, ".0")) %>% 
-  mutate(wilid = as.numeric(wilid)) %>% 
-  mutate(wilid = as.character(wilid)) %>%
-  rename(species = spp) %>% 
-  rename(pl_ht_cm = ht_cm) %>%
-  rename(live_dead = live) %>% 
-  mutate(season = "spring") %>% 
-  mutate(yr = as.character(2016))
-
-# some cleaning
-u16.raw <- u16.raw %>% 
-  mutate(site = if_else(site == "elk5 ?", "elk5",site)) %>%
-  mutate(plot = if_else(is.na(plot),"obs",plot)) %>%
-  mutate(site = if_else(site == "xtal","crystal",site)) %>% 
-  mutate(site2 = paste0(site, "-", "plot")) 
-
-u16.raw <- u16.raw %>% 
-  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
-
-# u16.raw %>% 
-#   distinct(site, plot) %>% 
-#   datatable()
-
-```
-
-```{r}
-
-u16.ht <- u16.raw %>% 
-  select(c(yr, season, site, plot, wilid, pl_ht_cm)) %>% 
-  distinct() %>% 
-  filter(is.na(pl_ht_cm))
-
-u16.ht %>% 
-  visdat::vis_dat()
-
-```
+LM created the file; unsure of source (field forms or other)
 
 ```{r}
 
@@ -914,7 +727,195 @@ ht_lm_entry_17 <- ht_lm_entry %>%
 ```
 
 
+## 2016 Production
+
+```{r}
+## read in raw file
+p16.raw <- read_excel("./data/raw/production/2016_Raw_Production_20180421.xlsx", col_types = "text") %>% 
+  janitor::clean_names()
+
+## rename inconsistently named columns
+p16.raw <- p16.raw %>% 
+  rename(wilid = wildid) %>% 
+  rename(species = spp) %>% 
+  rename(pl_ht_cm = height_cm) %>%
+  mutate(season = "fall") %>% 
+  mutate(yr = as.character("2016"))
+
+## trim white space
+p16.raw <- p16.raw %>% 
+  mutate(wilid = str_trim(string = .$wilid))
+
+## plot is NA for obs sites. Making explicit
+p16.raw <- p16.raw %>% 
+  mutate(plot = if_else(is.na(plot),"obs",plot)) %>%
+  mutate(site2 = paste0(site, "-", "plot"))
+
+# coercing wilid to integer. This induces NA because of non-numeric entries (e.g., wilid = "?"). I assume these are to be culled
+p16.raw <- p16.raw %>% 
+  mutate(wilid = as.integer(wilid))
+
+## create wilid full
+p16.raw <- p16.raw %>% 
+  mutate(wilid_full = paste0(site,"-",plot,"-",wilid))
+
+```
+
+```{r}
+# p16.raw %>% 
+#   distinct(site) %>%
+#   View()
+
+# p16.raw %>% 
+#   distinct(site, wilid) %>%
+#   gt() %>% 
+#   tab_header(title = "distinct site/wilid", subtitle = "2016_Raw_Production_20180421.xlsx")
+# 
+# p16.raw %>% 
+#   distinct(site, wilid_full) %>%
+#   gt() %>% 
+#   tab_header(title = "distinct site/wilid", subtitle = "2016_Raw_Production_20180421.xlsx")
+
+p16.raw %>% 
+  distinct(site, wilid_full) %>%
+  datatable(rownames = FALSE, caption = "2016_Raw_Production_20180421.xlsx")
+
+```
+
+```{r}
+p16.raw %>% 
+  distinct(site, wilid) %>% 
+  arrange(site) %>% 
+  datatable(rownames = FALSE, caption = "Distinct wilid in raw 2016 production excel file:2016_Raw_Production_20180421.xlsx",filter = 'top')
+
+p16.raw %>% 
+  group_by(wilid) %>% 
+  summarise(n.distinct.sites = n_distinct(site))%>% 
+  datatable(rownames = FALSE, caption = "Count of sites for each wilid value in raw 2016 production excel file: 2016_Raw_Production_20180421.xlsx")
+
+
+```
+
+```{r}
+
+```
+
+```{r, eval=TRUE}
+# !!!! issue with wilid parsing!
+# p16.raw <- p16.raw %>% 
+#   mutate(wilid_full = str_trim(string = .$wilid_full)) %>%
+#   # mutate(wilid.test = str_remove(wilid, ".0")) %>% 
+#   mutate(wilid_full = str_sub(string = wilid_full,start =  1,-3))
+
+```
+
+```{r}
+### Break out height from shoot level fields (e.g., sht_len_1)
+
+p16.ht <- p16.raw %>%  
+  dplyr::select(c(yr, wilid_full, site2, wilid, site, plot, species, pl_ht_cm,stem_id, live, season, notes))
+
+
+# !!!! issue with wilid parsing!
+p16.ht <- p16.ht %>% 
+  mutate(wilid_full = str_trim(string = .$wilid_full)) %>%
+  # mutate(wilid.test = str_remove(wilid, ".0")) %>% 
+  mutate(wilid_full = str_sub(string = wilid_full,start =  1,-3))
+
+
+# p16.ht <- p16.ht %>% 
+#   left_join(., lu.wilid.spp.v2, by = "wilid_full") %>%
+#   mutate(species = case_when(is.na(species.x)~species.y,
+#                              is.na(species.y)~species.x,
+#                              TRUE ~ "NA")) %>% 
+#   select(-c(species.x, species.y))
+
+# p16.ht <- 
+#   p16.ht %>% 
+#   # filter(!is.na(pl_ht_cm)) %>% 
+#   filter(!is.na(wilid))
+
+p16.ht %>% 
+  visdat::vis_dat()
+
+# u16.ht %>% 
+#   filter(is.na(species))
+```
+
+```{r}
+p16.ht <- p16.ht %>%
+  # select(-c(species)) %>%
+  mutate(yr = as.character("2016")) %>%
+  mutate(season = "fall") %>%
+  distinct()
+  
+p16.ht %>%   
+  ggTile_yr_season_site() +
+  labs(caption = "p16.ht")
+
+```
+
+```{r}
+p16.ht %>% 
+  group_by(wilid_full, site, plot) %>% 
+  tally() %>% 
+  datatable()
+
+```
+
+```{r}
+
+p16.ht %>% 
+  tabyl(site)
+
+```
+
+## 2016 Utilization
+
+The following show what I know now: **NO SPRING DATA FOR 2016**
+
+```{r}
+# 2016 utilization
+u16.raw <- read_excel("./data/raw/utilization/Raw_2016_Utilization/2016_Raw_Utilization.xlsx", col_types = "text") %>% 
+  janitor::clean_names()
+
+u16.raw <- u16.raw %>%
+  rename(wilid = wildid) %>%
+  mutate(wilid = str_trim(string = .$wilid)) %>%
+  # mutate(wilid.test = str_remove(wilid, ".0")) %>% 
+  mutate(wilid = as.numeric(wilid)) %>% 
+  mutate(wilid = as.character(wilid)) %>%
+  rename(species = spp) %>% 
+  rename(pl_ht_cm = ht_cm) %>%
+  rename(live_dead = live) %>% 
+  mutate(season = "spring") %>% 
+  mutate(yr = as.character(2016))
+
+# some cleaning
+u16.raw <- u16.raw %>% 
+  mutate(site = if_else(site == "elk5 ?", "elk5",site)) %>%
+  mutate(plot = if_else(is.na(plot),"obs",plot)) %>%
+  mutate(site = if_else(site == "xtal","crystal",site)) %>% 
+  mutate(site2 = paste0(site, "-", "plot")) 
+
+u16.raw <- u16.raw %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
+
+```
+
+```{r}
+u16.ht <- u16.raw %>% 
+  select(c(yr, season, site, plot, wilid, pl_ht_cm)) %>% 
+  distinct() %>% 
+  filter(is.na(pl_ht_cm))
+
+# u16.ht %>% 
+#   visdat::vis_dat()
+
+```
+
 ## 2017 Production
+
 ```{r}
 
 p17.raw <- read_excel("./data/raw/production/2017_Raw_Production_20180423.xlsx", col_types = "text") %>% 
@@ -997,7 +998,6 @@ p17.ht %>%
   datatable()
 ```
 
-
 ```{r}
 # p17.ht <- p17.ht 
 
@@ -1009,7 +1009,6 @@ p17.ht %>%  distinct(wilid_full) %>% datatable()
 
 ```
 
-
 ```{r, eval=FALSE}
 
 ## issue with obs plots having 
@@ -1019,8 +1018,8 @@ p17.ht %>%
 
 ```
 
-
 ## 2017 Utilization
+
 ```{r}
 # 2017 utilization
 u17.raw <- read_excel("./data/raw/utilization/Raw_2017_Utilization/2017_Raw_Utilization.xlsx", col_types = "text") %>% 
@@ -1086,7 +1085,7 @@ u17.ht %>%
 
 ```
 
-_u17.ht_
+*u17.ht*
 
 ```{r, eval = FALSE, fig.height=8}
 gg.u17 <- u17.ht %>% 
@@ -1099,7 +1098,7 @@ plotly::ggplotly(gg.u17)
 ```
 
 ## 2018 Production
- 
+
 ```{r}
 # data updated as of 20191203
 files2018 <- fs::dir_ls("./data/raw/production/Raw_2018_Production", recurse = FALSE, glob = "*.xlsx")
@@ -1172,7 +1171,6 @@ p18.exp %>%
 
 ```
 
-
 ```{r}
 ###
 p18 <- p18 %>% 
@@ -1182,11 +1180,9 @@ p18 <- p18 %>%
   mutate(season = "fall")
 ```
 
-
 ```{r}
 
 ```
-
 
 ```{r}
 ## 
@@ -1246,7 +1242,6 @@ p18sel %>%
   labs(caption = "p18sel")
 
 ```
-
 
 ## 2019 Production
 
@@ -1321,7 +1316,6 @@ p19sel %>%
   gt()
 
 ```
-
 
 ```{r}
 # eliminate duplicate rows 
@@ -1399,7 +1393,6 @@ p1819.wilidht %>% ggTile_yr_season_plot()  +
 
 ```
 
-
 ```{r}
 ## Additional 18 data?
 # 
@@ -1461,7 +1454,6 @@ p1819.wilidht %>% ggTile_yr_season_plot +
 
 ## 2018 Utilization
 
-
 ```{r}
 ufiles2018 <- fs::dir_ls("./data/raw/utilization/Raw_2018_Utilization", recurse = FALSE, glob = "*.xlsx")
 # view(ufiles2018)
@@ -1493,7 +1485,6 @@ u18 %>%
 
 ```
 
-
 ```{r}
 ## whack a mole.
 # change lb41 to lb4
@@ -1520,7 +1511,6 @@ u18 %>%
   distinct(site) %>% gt()
 
 ```
-
 
 ```{r}
 # u18 %>% names.dt()
@@ -1553,7 +1543,6 @@ u18.ht <- u18 %>%
 
 ```
 
-
 ```{r}
 ### 2018 crescent
 u18.ht %>% 
@@ -1585,7 +1574,6 @@ u18.ht <- u18.ht %>%
   mutate(wilid = str_remove(.$wilid, ".0")) # remove the ".0" part of strings
 
 ```
-
 
 ```{r}
 ##########
@@ -1628,7 +1616,6 @@ u18.ht %>%
 u18.ht %>% 
   ggTile_yr_season_plot()
 ```
-
 
 No 'cx' for 2018 spring
 
@@ -1706,8 +1693,8 @@ u18.plotly.obs <- u18.ht %>%
 plotly::ggplotly(u18.plotly.obs) 
 ```
 
-
 ## 2019 Utilization
+
 ```{r}
 #### 
 ufiles2019 <- fs::dir_ls("./data/raw/utilization/Raw_2019_Utilization", recurse = FALSE, glob = "*.xlsx")
@@ -1774,7 +1761,6 @@ u19.ht <- u19.ht %>%
 u19.ht %>% ggTile_yr_season_site()
 ```
 
-
 ```{r}
 # rename, reclass
 u19.ht <- u19.ht %>% 
@@ -1825,6 +1811,7 @@ u19.ht <- u19.ht %>%
 ```
 
 #### update species lu
+
 ```{r}
 
 ## spp lu update
@@ -1845,7 +1832,6 @@ lu.wilid.spp.v3 <- u19.ht %>%
 
 ```
 
-
 ```{r, eval = FALSE}
 u19.ht %>%
   visdat::vis_miss(cluster = TRUE) +
@@ -1856,7 +1842,6 @@ u19.ht %>%
 
 # plotly::ggplotly()
 ```
-
 
 ```{r}
 u19.ht <- u19.ht %>% 
@@ -1883,13 +1868,11 @@ u19.ht %>%
 
 ```
 
-
 ```{r}
 u19.ht %>% 
   gt_tally_site_plot_yr_season()
 
 ```
-
 
 ```{r}
 u19.ht %>% 
@@ -1911,7 +1894,6 @@ th16.19 <- read_csv("data/Tom_missingrecs/2016-2019time_series.csv")
 
 ```
 
-
 ```{r}
 ## lots of dead rows imported b/c of the conservative read of the tabs in the excel workbooks. Eliminate these...
 p18 <- p18 %>% 
@@ -1924,8 +1906,6 @@ p18 %>%
 # assume NA for plot == obs
 
 ```
-
-
 
 ```{r}
 ### Combine 18 and 19 spring data
@@ -2011,7 +1991,6 @@ u18u19.ht <- u18u19.ht %>%
 
 ```
 
-
 ```{r}
 ### Combine spring and fall for 2018 and 2019
 ##
@@ -2060,8 +2039,7 @@ ht.all18.19 %>%
 
 ```
 
-Missing data:
-Yancy fall 2018
+Missing data: Yancy fall 2018
 
 ```{r}
 
@@ -2080,7 +2058,7 @@ ht.all18.19 %>%
   labs(title = "Obs sites", caption = 'ht.all18.19')
 
 ```
-# >>>
+
 ```{r}
 ### Bring in 16 17
 ## 16
@@ -2094,7 +2072,7 @@ p16.ht %>%
   gt() %>% 
   tab_header(title = "n distinct fall 2016 site2")
 
-## corect site id data entry error
+## correct site id data entry error
 p17.ht <- p17.ht %>% 
   mutate(site = if_else(site == "wn","wb",site)) %>%   mutate(site2 = paste0(site,"-",plot)) %>% 
   mutate(yr = as.character("2017")) %>% 
@@ -2148,7 +2126,6 @@ p16p17 %>%
   labs(caption = "Combined 2016 and 2017 fall height")
 ```
 
-
 ```{r}
 ## spring 16 17
 u16.ht <- u16.ht %>%
@@ -2162,8 +2139,10 @@ u17.ht <- u17.ht %>%
 
 ```
 
-```{r, echo = FALSE}
 ## Lewis's other entry data
+
+```{r, echo = FALSE}
+
 ht_lm_entry_17 <- ht_lm_entry_17 %>%
   select(-c(exp,dam,browse)) %>% 
   mutate(site2 = paste0(site,"-",plot)) %>% 
@@ -2185,7 +2164,6 @@ u17_lmentry <- u17.ht %>%
 
 # u17_lmentry %>%  distinct(wilid) %>% View()
 ```
-
 
 ```{r}
 #### bind rows p16, p17, all ht 18 19
@@ -2221,7 +2199,6 @@ p.16.17.18.19 <- p.16.17.18.19 %>%
 p.16.17.18.19 %>% ggTile_yr_season_plot_alt1()
 ```
 
-
 ```{r}
 
 u18u19.ht <- u18u19.ht %>% 
@@ -2236,19 +2213,9 @@ ht.all.16.17.18.19 <- p.16.17.18.19 %>%
 
 ```
 
-```{r}
-# u16.ht
+### Combine with the ht extracted from prodx.csv and sprcagx.csv
 
-# u17.ht
-
-## add in the 16 and 17 spring data
-
-```
-
-
-### Combine with the ht extracted from prodx.csv and sprcagx.csv 
-
-Scraping these files for any data 
+Scraping these files for any data
 
 ```{r}
 
@@ -2309,7 +2276,9 @@ ht.all.16.17.18.19 <- ht.all.16.17.18.19 %>%
   mutate(site2 = paste0(site,"-", plot)) %>% 
   mutate(wilid_full = paste0(site2,"-", wilid))
 
+```
 
+```{r}
 ht.all.16.17.18.19 %>% 
   group_by(yr, season, site) %>%
   summarise(n= n()) %>%
@@ -2323,8 +2292,6 @@ ht.all.16.17.18.19 %>%
   facet_wrap(~season) +
   scale_fill_viridis(option = "C") +
   labs(caption = "Combined 2016 and 2017 fall height")
-
-
 ```
 
 ```{r}
@@ -2352,6 +2319,8 @@ ht.all.01.19 %>%
   ggTile_yr_season_site()
 
 ```
+
+## Bind in records from DCC
 
 ```{r}
 
@@ -2404,7 +2373,6 @@ dcc.16.17.18.19 %>%
   facet_wrap(~season)
 
 ```
-
 
 ```{r}
 dcc.16.17.18.19 <- dcc.16.17.18.19 %>% 
@@ -2495,7 +2463,6 @@ ht.combined %>%
   labs(caption = "Combined DCC, 16-19")
 ```
 
-
 ```{r}
 ### the missing spring dcc data
 # note: this is supplanted by code that pulls in 
@@ -2549,7 +2516,6 @@ ht.combined <- ht.combined %>%
 
 ```
 
-
 ```{r}
 
 # ## find missing data
@@ -2565,7 +2531,6 @@ ht.combined %>%
 # ggsave("./output/output4qaqc/height_heatmap20191204 1937.pdf", width = 11, height = 8.5)
 
 ```
-
 
 ```{r}
 #clean sites
@@ -2609,6 +2574,7 @@ ht.combined %>%
   facet_wrap(~season)
 
 ```
+
 ```{r}
 ## correct the height
 ht.combined <- ht.combined %>%
@@ -2617,7 +2583,6 @@ ht.combined <- ht.combined %>%
 
 # these should be corrected in raw files?
 ```
-
 
 ### Rebind spring
 
@@ -2687,7 +2652,6 @@ ht.combined <- ht.combined %>%
 ht.combined %>% ggTile_yr_season_site2()
 
 ```
-
 
 ```{r}
 ht.combined <- ht.combined %>% 
@@ -2785,6 +2749,7 @@ ht.combined %>%
 ### Data checks
 
 ### Specific issues Tom found regarding wb out of range data
+
 ```{r}
 ## Fa raw DCC. Note error in wilid=158, 2010 
  read_delim("./data/NSF_DataArchive20180208/Plant_level_fall_current_annual_growth_and_height_on_experimental_plot/willows-plantCAGfall2002-2015.txt", delim = " ") %>% 
@@ -2803,8 +2768,7 @@ ht.combined %>%
 
 ```
 
-Two issues here, now fixed:
-1.plant height of 1362 would appear to be a data entry error in the raw file. This is 2010 data drawn from the DCC (library repository), so I don't have the raw data to check. The value is in the raw file, not an artifact introduced in the data processing. I've changed it to "362". 
+Two issues here, now fixed: 1.plant height of 1362 would appear to be a data entry error in the raw file. This is 2010 data drawn from the DCC (library repository), so I don't have the raw data to check. The value is in the raw file, not an artifact introduced in the data processing. I've changed it to "362".
 
 ```{r}
 
@@ -2817,9 +2781,7 @@ ht.combined %>%
 
 ```
 
-
 1.Notice the different species: booth vs boothi, beb vs bebb. I ran code to find and replace such issues, but had it too early in the chain of transformations involved in the import and merging of the raw data. I have steps to remove duplicates, but b/c of the different species, they're not the same.
-
 
 ```{r}
 ## add full id to join with species
@@ -2858,7 +2820,6 @@ ht.combined <- ht.combined %>%
 #                           ))
 #   
 ```
-
 
 ```{r}
 
@@ -2916,7 +2877,6 @@ ht.combined %>%
 
 ```
 
-
 ```{r, eval=FALSE}
 # ### Bind in the sprcag and prod derived ht data
 ht.combined2 <- ht.combined %>% 
@@ -2956,7 +2916,6 @@ ht.combined <- ht.combined %>%
                           TRUE ~ plot))
 ```
 
-
 ```{r}
 ### QA QC checks on combined data
 # ht.combined %>%
@@ -2973,7 +2932,6 @@ ht.combined %>%
 
 ```
 
-
 ```{r}
 ht.combined %>% 
   mutate(yr = as.character(yr)) %>%
@@ -2981,7 +2939,6 @@ ht.combined %>%
   ggPoint_yr_site_season_plot()
 
 ```
-
 
 ```{r, fig.height=10}
 gg.plty1 <- ht.combined %>% 
@@ -3010,7 +2967,6 @@ plotly::ggplotly(gg.plty1)
 # lu_site_beav <- read_csv("./data/lu_site_site2_beav.csv")
 
 ```
-
 
 ```{r}
 ## plt join
@@ -3048,7 +3004,6 @@ pltly1 <- ht.combined %>%
 plotly::ggplotly(pltly1)
 
 ```
-
 
 ```{r}
 # fix
@@ -3142,7 +3097,6 @@ ht.combined %>%
 
 ```
 
-
 ```{r, eval = FALSE}
 
 ht.combined.nest <- ht.combined %>%
@@ -3217,7 +3171,6 @@ ht.combined %>%
 
 ```
 
-
 ```{r}
 ## summarize by site2 and year using skimr
 summary.by.site2 <- ht.combined %>% 
@@ -3268,7 +3221,6 @@ summary.by.site2 %>%
 
 ```
 
-
 ```{r, eval=FALSE}
 ## create species lookup
 # ht.combined %>% 
@@ -3302,6 +3254,7 @@ ht.combined %>%
 ```
 
 ## Species and plot lu join
+
 ```{r}
 
 lu.wilid.spp.v3 <- lu.wilid.spp.v3 %>% 
@@ -3359,15 +3312,14 @@ ht.combined %>%
 
 ```
 
-
 ## Export
+
 ```{r}
 
 ht.combined %>% 
   # mutate(wilid = str_remove(.$wilid, ".0"))
   filter(is.na(species))
 ```
-
 
 ```{r, eval=FALSE}
 ht.combined %>%
@@ -3376,472 +3328,79 @@ ht.combined %>%
 
 ```
 
-```{r}
+# Tom list
 
-lu.wilid.spp.v3
+TH sent pdf of hist tallies on 20201118
+
+```{r}
+library(tabulizer)
+tom.tbl <- tabulizer::extract_tables(file = "Willow_id_inventory_TH_20201118.pdf")
+
+## bind matrices corresponding to each page in pdf
+tom.tbl <- do.call(rbind, tom.tbl[-length(tom.tbl)])
+
+## convert to tibble
+tom.tbl <- tom.tbl %>% 
+  as.tibble() %>% 
+  janitor::row_to_names(1) %>% 
+  janitor::clean_names() %>% 
+  rename(row = x)
+
+## write this table to csv
+# write_csv(tom.tbl, "Willow_id_inventory_TH_20201118.csv")
+
+
+tom.tbl %>% 
+  datatable(rownames = FALSE, caption = "Extract of TH's 'Willow_id_inventory.pdf' file sent 20201118")
 
 ```
 
+```{r}
+ht.combined %>% 
+  filter(season == "fall") %>% 
+  group_by(wilid_full, yr) %>% 
+  summarise(n = n()) %>%
+  datatable()
+  
+ht.combined %>% 
+  distinct(yr)
+
+## table similar to tom's
+fa.tally.qa <- ht.combined %>%
+  mutate(yr = as.integer(yr)) %>% 
+  filter(season == "fall") %>% 
+  group_by(wilid_full, yr) %>% 
+  summarise(n = n()) %>%
+  group_by(wilid_full) %>% 
+  mutate(min.yr = min(yr, na.rm = TRUE), max.yr = max(yr, na.rm = TRUE)) %>%
+  ungroup()
+
+# fa.tally.qa %>% 
+#   datatable()
+
+fa.tally.qa %>% 
+  filter(min.yr > "2015") %>% 
+  datatable()
+
+fa.tally.qa %>% 
+  filter(min.yr > "2015") %>%
+  mutate(min.yr = as.character(min.yr)) %>% 
+  ggplot(aes(reorder(wilid_full, min.yr),yr)) +
+  geom_tile(aes(fill = min.yr))
+
+```
 
 # Notes
 
 The metadata csv included in the DCC repository does not include all the variables.
 
-In the DCC data, “browse = 0” indicates experimental exclosure treatment. For example, see willid 1 in EB1. The plot type is listed in the 2018 dataset as “dx”. In the 2001-2017 data, it’s dam == 1, browse == 0
+In the DCC data, "browse = 0" indicates experimental exclosure treatment. For example, see willid 1 in EB1. The plot type is listed in the 2018 dataset as "dx". In the 2001-2017 data, it's dam == 1, browse == 0
 
-In the supplemental material accompanying the 2013 Marshall et al. ProcRoySoc paper, the willid are attributed with “dammed” and “UNbrowsed”. This is confusing, since for “dam”, 1 is the experimental treatment, but for “browse”, 1 is the control.
-
-# Sandbox
-
-```{r, echo=FALSE, eval = FALSE}
-# Sandbox
-
-# 17 raw production data
-p17sel <- p17 %>% 
-  select(date, site, plot, spp, wildid, height_cm, stem_id) 
-
-p17sel <- p17sel %>% 
-  rename(stid = stem_id) %>% 
-  rename(wilid = wildid) %>% 
-  rename(pl_ht_cm = height_cm) 
-
-p17sel %>%
-  glimpse()
-
-# fix formating of wilid
-p17sel <- p17sel %>% 
-  mutate(wilid = as.integer(wilid)) %>% 
-  mutate(wilid = as.character(wilid)) %>%
-  # mutate(date = as.integer(date)) %>% 
-  # mutate(date = as.character(date)) %>%
-  mutate(stid = as.integer(stid)) %>% 
-  mutate(stid = as.character(stid)) %>%
-  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
-
-p18p19sel %>% names()
-
-## bring in 17
-p17p18p19sel <- bind_rows(p17sel, p18p19sel)
-
-## change  stid for stem_id
-## live_status
-## stem_id ~ stid
-## height_cm
-
-```
-
-```{r, echo=FALSE}
-# > **Questions/Issues:**    
-# > 1. "NA", "na" and "missing" inconsistently used for 'plantht' [fixed] 
-# > 2. Not sure on the interpretation of the "2" for the dam field. Three unique values: 0,1,2. Expected only 0 and 1. Interprete as "obs"
-# > 3. Any special meaning to "ID" field or is this a file-specific index? 
-# > 4. In previous QA/QC checks, it was noted that willid is not unique across all sites. Temporary fix combining "willid" and siteid
-
-```
-
-
-
-```{r, echo=FALSE, eval=FALSE}
-### Using z-scores to evaluate unusual fall plant height values across years
-w_ht %>% 
-  filter(season=="fall") %>% 
-  group_by(wilid) %>% 
-  mutate(cnt.group = n()) %>% 
-  mutate(z_score = scale(pl_ht_cm)) %>% 
-  # select(-c(exp,dam,browse,ID)) %>% 
-  datatable()
-
-```
-
-
-
-
-```{r, fig.height=34, fig.width=9, eval=FALSE, echo=FALSE}
-## Graphical evalaution
-
-### Heat map: count of observations by "willid" and "year" -- Spring
-
-w_ht %>% 
-  filter(season=="spring") %>% 
-  tabyl(willid, year) %>%
-  gather(key = year, value = cnt,-willid) %>% 
-  ggplot(aes(year, willid)) +
-  geom_tile(aes(fill=cnt), color="grey") +
-  scale_fill_gradient(low = "white", high = "blue") +
-  # scale_fill_gradient2(low = "white", mid = "blue", high = "red", midpoint = 2, space = "Lab", na.value = "grey50", guide = "colourbar") +
-  # scale_fill_viridis() +
-  theme_bw() +
-  labs(title = "Count of Spring height measurements") +
-  theme(axis.text.x=element_text(angle=45, hjust=1)) +
-  theme(axis.text.y = element_text(face="bold", color="black", 
-                           size=6))
-
-```
-
-
-
-```{r, fig.height=34, fig.width=9, eval = FALSE, echo=FALSE}
-### Heat map: count of observations by "willid" and "year" -- Fall
-w_ht %>% 
-  filter(season=="fall") %>% 
-  tabyl(willid, year) %>%
-  gather(key = year, value = cnt,-willid) %>% 
-  ggplot(aes(year, willid)) +
-  geom_tile(aes(fill=cnt), color="grey") +
-  scale_fill_gradient(low = "white", high = "blue") +
-  # scale_fill_gradient2(low = "white", mid = "blue", high = "red", midpoint = 2, space = "Lab", na.value = "grey50", guide = "colourbar") +
-  # scale_fill_viridis() +
-  theme_bw() +
-  labs(title = "Count of Fall height measurements") +
-  theme(axis.text.x=element_text(angle=45, hjust=1)) +
-  theme(axis.text.y = element_text(face="bold", color="black", 
-                           size=6))
-
-```
-
-
-
-
-```{r fig.height=12, fig.width=9, eval = FALSE, echo=FALSE}
-# boxplots of height and year
-w_ht %>% 
-  # group_by(site) %>%
-  # mutate(cnt.WatID = n()) %>%
-  # filter(Year>2000) %>%
-  # mutate(Year = as.character(Year)) %>%
-  # filter(str_detect(Wat_ID2, "E")) %>%
-  # filter(cnt.WatID > 3 & rellevel < 999) %>%
-  # ggplot(aes(Date,rellevel)) +
-  mutate(year = as.character(year)) %>% 
-  ggplot(aes(x=year,y=plantht, fill=season)) +
-  geom_boxplot(aes(fill=season)) +
-  # geom_jitter(width = 0.15, height = 0.15, aes(color=season)) +
-  # geom_point(color="darkblue", alpha=0.1,position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.2)) +
-  # geom_boxplot(aes(group=Year)) +
-  theme_minimal() +
-  # theme(legend.position = "none") +
-  facet_wrap(~site, ncol=6, scales = "free") +
-  theme(axis.text.x = element_text(face="bold", color="black", 
-                           size=7, angle=75, hjust = 1))
-
-```
-
-```{r, fig.height=10, fig.width=6, eval = FALSE, echo=FALSE}
-### boxplots of Spring height measurements
-w_ht %>% 
-  filter(season=="spring") %>% 
-  mutate(year = as.character(year)) %>% 
-  ggplot(aes(x=year,y=plantht)) +
-  geom_boxplot() +
-  theme_minimal() +
-  theme(legend.position = "none") +
-  labs(title = "Count of spring height measurements") +
-  facet_wrap(~site, ncol=5, scales = "free") +
-  theme(axis.text.x = element_text(face="bold", color="black", 
-                           size=9, angle=75, hjust = 1))
-
-
-```
-
-```{r,fig.height=10, fig.width=9, eval = FALSE, echo=FALSE}
-### boxplots of Fall height measurements
-w_ht %>% 
-  filter(season=="fall") %>% 
-  mutate(year = as.character(year)) %>% 
-  ggplot(aes(x=year,y=plantht)) +
-  geom_boxplot() +
-  theme_minimal() +
-  theme(legend.position = "none") +
-  labs(title = "Count of fall height measurements") +
-  facet_wrap(~site, ncol=5, scales = "free") +
-  theme(axis.text.x = element_text(face="bold", color="black", 
-                           size=9, angle=75, hjust = 1))
-
-```
-
-
-```{r, eval = FALSE}
-#### old
-## Import 2018 Data
-prod.path <- "data/raw/production/Exp_2018_Production_Height_20181220.xlsx"
-
-# the following seems to work for taking all of the tabs, importing them into a single tibble
-# B/c of parsing errors, everything is brought in as char, so need to type-fix.
-prod18.df <- prod.path %>% 
-  excel_sheets() %>% 
-  set_names() %>%
-  map(read_excel, path = prod.path, skip = 1, col_types = 'text') %>% 
-  map(clean_names) %>% 
-  map_df(.f = bind_rows, .id = "FNAME")
-
-# I could theoretically type set on import through the 'col_types' arg, BUT some of the tabs have 126 columns, some 127... Not sure which columns differ. A different puzzle to solve at some point :)
-
-```
-
-```{r, eval = FALSE, echo = FALSE}
-## Select subset and type cast
-prod18.df.sel <- prod18.df %>%
-  select(FNAME, site, plot, spp, wilid, pl_ht_cm, stid) %>% 
-  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) 
-
-# filter out the na for ht
-prod18.df.sel <- prod18.df.sel %>% 
-  filter(!is.na(pl_ht_cm))
-
-```
-
-```{r, eval = FALSE, echo = FALSE}
-## calc ht summary. Mean and max should be the same
-prod18.df.sel.summary <- prod18.df.sel %>% 
-  group_by(site, plot, wilid) %>% 
-  summarise(totstems = n_distinct(stid), mean.pl.ht = mean(pl_ht_cm, na.rm = TRUE), max.pl.ht = max(pl_ht_cm)) %>% 
-  ungroup()
-
-## Note: "totstems" is named to match the same column in the Plant level fall current annual growth and height 
-
-```
-
-
-```{r, eval = FALSE, echo = FALSE}
-#### Issues to fix:
-# There should only be one height measurement for each wilid, but this isn't the case for 4/252 wilid. 
-
-## note that there are 4/252 rows with a diff...
-# will go with the max for now
-prod18.df.sel.summary %>%
-  mutate(diff = mean.pl.ht - max.pl.ht) %>% 
-  arrange(diff) %>% 
-  datatable()
-
-# The specific problem records:
-prod18.df.sel %>% 
-  filter(wilid == '744') # does matter for this record.
-
-prod18.df.sel %>% 
-  filter(wilid == '780') # does matter much for this record. Big difference between stid 785 and the other stid
-
-prod18.df.sel %>% 
-  filter(wilid == '293') # doesn't matter much for this record. 1 cm diff between the highest and lowerst stid. 
-
-prod18.df.sel %>% 
-  filter(wilid == '786') # doesn't matter much for this record. 70cm diff btn the highest and lowest stid
-
-
-```
-
-
-```{r, eval= FALSE}
-## plot the count of observations
-w_ht01_17 %>%
-  mutate(year = as.factor(year)) %>% 
-  group_by(season, year) %>% 
-  summarise(cnt = n()) %>% 
-  ggplot(aes(year, cnt)) + 
-  geom_bar(stat = 'identity', aes(fill = season), position = "dodge", color = "black") +
-  theme_bw()
-# There's only two years (01,17) with Spring measurements...
-```
-
-```{r, eval = FALSE, echo = FALSE}
-## keep only fall height measurements
-w_ht01_17 <- w_ht01_17 %>% 
-  filter(season == 'fall') 
-
-w_ht01_17 %>%
-  distinct(exp,dam, browse)
-# what does '2' denote for 'dam'?
-
-# w_ht01_17 %>% 
-#   datatable()
-
-## note that the "browse = 0" would seem to mean the experimental exclosure treatment.
-# for example, see willid 1 in EB1. The plot type is listed in the 2018 dataset as "dx". In the 2001-2017 data, it's dam == 1, browse == 0
-# In the supplemental material accompanying the 2013 Marshall et al. ProcRoySoc paper, the willid are are attributes with "dammed" and "UNbrowsed". 
-
-# This is confusing, since for "dam", 1 is the experimental treatment, but for "browse", 1 is the control. 
-
-# proceeding from the above...
-w_ht01_17 <- w_ht01_17 %>% 
-  mutate(plot = case_when(dam == 0 & browse == 0 ~ "cx",
-                           dam == 1 & browse == 0 ~ "dx",
-                           dam == 0 & browse == 1 ~ "cc",
-                           dam == 1 & browse == 1 ~ "dc",
-                           TRUE ~ "obs"
-                           ))
-
-```
-
-```{r, eval = FALSE, echo = FALSE}
-## QA/QC: ID cases where there are multiple records for willid-season-yr combinations
-w_ht01_17 %>% 
-  group_by(site, year, willid, season) %>% 
-  mutate(cnt.rec = n()) %>% 
-  ungroup() %>% 
-  filter(cnt.rec != 1) %>% 
-  arrange(desc(willid)) %>% 
-  datatable(caption = "Willid with >1 observation for willid-year-season combination. Something is in error here...")
-
-```
-
-```{r, eval = FALSE, echo = FALSE}
-# Combine the 2001-2017 to 2018 data
-
-## need to type convert some columns first...
-w_ht01_17 <- w_ht01_17 %>% 
-  select(-c(ID,exp, dam, browse)) %>% 
-  mutate(plantht = readr::parse_number(plantht)) %>% 
-  mutate(willid = as.character(willid)) %>% 
-  mutate(year = as.integer(year))
-
-# w_ht01_17 %>% 
-#   glimpse
-
-## type convert 2018
-prod18.df.sel.summary <- prod18.df.sel.summary %>%
-  select(-totstems) %>% 
-  mutate(year = as.integer(year))
-
-# prod18.df.sel.summary %>% 
-#   glimpse
-
-# do the combining...
-willowht.01_18 <- bind_rows(w_ht01_17,prod18.df.sel.summary) %>% 
-  filter(plot != 'obs') # there are only obs records for 2015 and for elk5 and crystal. Dropping these. 
-
-
-```
-
-
-
-```{r, eval = FALSE, echo = FALSE}
-# ### Outlier analysis
-# 
-# There are some problematic records...
-## lets do some ggrepel
-# ??ggrepel
-willowht.01_18 %>%
-  group_by(willid) %>%
-  mutate(std.ht = sd(plantht, na.rm = TRUE)) %>% 
-  mutate(mn.ht = mean(plantht,na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  mutate(zVal = abs((mn.ht - plantht)/std.ht)) %>% 
-  mutate(outlier = ifelse(zVal > 2.5, willid, as.numeric(NA))) %>% 
-  mutate(year = as.character(year)) %>% 
-  ggplot(aes(year,plantht)) +
-  geom_boxplot(aes(fill = plot)) +
-  # geom_text(aes(label = outlier), na.rm=TRUE, hjust = -.3) +
-  geom_text_repel(aes(label = outlier), na.rm=TRUE, hjust = -.3) +
-  labs(title = "Fall Willow Height", x= "Year", y = "Height (cm)")
-
-willowht.01_18 %>%
-  group_by(willid) %>%
-  mutate(std.ht = sd(plantht, na.rm = TRUE)) %>% 
-  mutate(mn.ht = mean(plantht,na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  mutate(zVal = abs((mn.ht - plantht)/std.ht)) %>% 
-  mutate(outlier = ifelse(zVal > 2.5, willid, as.numeric(NA))) %>% 
-  mutate(year = as.character(year)) %>% 
-  ggplot(aes(year,plantht)) +
-  geom_boxplot(aes(fill = plot)) +
-  # geom_text(aes(label = outlier), na.rm=TRUE, hjust = -.3) +
-  geom_label_repel(aes(label = outlier), na.rm=TRUE, hjust = -.3) +
-  labs(title = "Fall Willow Height - Outlier analysis", subtitle = "The 'willid' of observations >2.5 sd away from the group (willid) mean are labeled", y = "Height (cm)")
-
-
-
-```
-
-```{r, eval = FALSE, echo = FALSE}
-willowht.01_18 %>%
-  group_by(willid) %>%
-  mutate(std.ht = sd(plantht, na.rm = TRUE)) %>% 
-  mutate(mn.ht = mean(plantht,na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  mutate(zVal = abs((mn.ht - plantht)/std.ht)) %>% 
-  mutate(outlier = ifelse(zVal > 3, willid, as.numeric(NA))) %>%
-  filter(!is.na(outlier))
-```
-
-
-
-```{r, eval = FALSE, echo = FALSE}
-
-### Culling the outliers 
-
-willowht.01_18.rmOutlier <- willowht.01_18 %>%
-  group_by(year, site) %>%
-  mutate(std.ht = sd(plantht, na.rm = TRUE)) %>% 
-  mutate(mn.ht = mean(plantht,na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  mutate(zVal = abs((mn.ht - plantht)/std.ht)) %>% 
-  mutate(outlier = ifelse(zVal > 2.5, willid, as.numeric(NA))) %>%
-  filter(is.na(outlier))
-
-
-willowht.01_18.rmOutlier %>% 
-  mutate(year = as.factor(year)) %>% 
-  ggplot(aes(year,plantht)) +
-  geom_boxplot(fill='ivory') +
-  geom_jitter(color='blue', alpha = .05) +
-  geom_hline(yintercept = 200, color = 'red', lty = 'dashed') +
-  labs(title = "Fall Willow Height - 2001-2018", x = "Year", y = "Height (cm)") +
-  facet_wrap(~plot, ncol = 2) +
-  # scale_color_viridis(discrete = TRUE) +
-  theme_minimal() +
-  theme(legend.position="none") +
-  theme(axis.text.x = element_text(angle = 40, hjust = 1))
-ggsave("fallHt01to18.png",dpi = 300, width = 7, height = 5.5)
-
-willowht.01_18.rmOutlier %>% 
-  mutate(year = as.factor(year)) %>% 
-  ggplot(aes(year,plantht)) +
-  geom_boxplot(fill='ivory') +
-  geom_jitter(color='blue', alpha = .05) +
-  geom_hline(yintercept = 200, color = 'red', lty = 'dashed') +
-  labs(title = "Fall Willow Height - 2001-2018", x = "Year", y = "Height (cm)") +
-  facet_wrap(~plot, ncol = 2) +
-  # scale_color_viridis(discrete = TRUE) +
-  theme_minimal() +
-  theme(legend.position="none") +
-  theme(axis.text.x = element_text(angle = 40, hjust = 1))
-ggsave("fallHt01to18.png",dpi = 300, width = 7, height = 5.5)
-
-```
-
-
+In the supplemental material accompanying the 2013 Marshall et al. ProcRoySoc paper, the willid are attributed with "dammed" and "UNbrowsed". This is confusing, since for "dam", 1 is the experimental treatment, but for "browse", 1 is the control.
 
 ```{r, echo = FALSE, eval = FALSE}
-## Plots
-willowht.01_18.rmOutlier %>% 
-  mutate(year = as.character(year)) %>% 
-  ggplot(aes(year,plantht)) +
-  geom_boxplot(aes(fill = plot)) +
-  geom_hline(yintercept = 200, color = "red", lty = 'dashed', size = 1.72) +
-  labs(title = "Fall Willow Height - 2001-2018", x= "Year", y = "Height (cm)") +
-  theme_minimal()
-
-
-```
-
-
-```{r, echo = FALSE, eval = FALSE}
-willowht.01_18.rmOutlier %>% 
-  # mutate(year = as.character(year)) %>% 
-  ggplot(aes(year,plantht)) +
-  geom_jitter(alpha = .05) +
-  geom_smooth(aes(color = plot)) + 
-  # geom_boxplot(aes(fill = plot)) +
-  geom_hline(yintercept = 200, color = "red", lty = 'dashed', size = 1.72) +
-  labs(title = "Fall Willow Height - 2001-2018", subtitle = "Smooth lines using method = 'gam' and formula y ~ s(x, bs = cs)", x= "Year", y = "Height (cm)") +
-  theme_minimal()
-```
-
-```{r, echo = FALSE, eval = FALSE}
+## Derived data export
 ## Write export file to disk
-# export to disk
-write_csv(x = willowht.01_18.rmOutlier, path =  "output/datasets/willowht_FallExp_2001_2018_20190102.csv")
-# note that this file still has the issue of multiple records that needs to be addressed.
 
 
 ```
-
