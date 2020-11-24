@@ -2408,11 +2408,6 @@ lm.20201118 <- lm.20201118 %>%
 
 ```
 
-```{r}
-lm.20201118.wilid_full.lu %>% 
-  gt() %>% 
-  tab_header(title = "Distinct wilid_full", subtitle = "File: MIssingWillowRecordsFromLewis_20201118.csv")
-```
 
 ```{r}
 # File: MIssingWillowRecordsFromLewis_20201118.csv
@@ -2461,6 +2456,27 @@ lm.20201118 %>%
 ## create a lookup to compare with previously imported and munged data (e.g., prod files)
 lm.20201118.wilid_full.lu <- lm.20201118 %>%
   distinct(wilid_full) 
+
+
+```
+
+```{r}
+lm.20201118.wilid_full.lu %>% 
+  gt() %>% 
+  tab_header(title = "Distinct wilid_full", subtitle = "File: MIssingWillowRecordsFromLewis_20201118.csv")
+```
+
+
+```{r}
+# Filtering joins filter rows from x based on the presence or absence of matches in y:
+# 
+# semi_join() return all rows from x with a match in y.
+# 
+# anti_join() return all rows from x without a match in y.
+
+## use LU from missing records
+# anti_join()
+
 ```
 
 ## Export 2016-2018 height
