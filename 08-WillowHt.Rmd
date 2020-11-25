@@ -2229,8 +2229,14 @@ ht.all.16.17.18.19 <- p.16.17.18.19 %>%
   # select(-c(file_name,live_status)) %>% 
   distinct()
 
+```
+
+```{r}
+ht.all.16.17.18.19 %>% 
+  distinct()
 
 ```
+
 
 ### Combine with the ht extracted from prodx.csv and sprcagx.csv
 
@@ -2249,9 +2255,6 @@ ht.all.16.17.18.19 <- ht.all.16.17.18.19 %>%
   mutate(site2 = paste0(site,"-",plot)) %>% 
   mutate(wilid_full = paste0(site2,"-",wilid))
 
-# ht.all.16.17.18.19 <- ht.all.16.17.18.19 %>%
-#   filter(!is.na(site)) %>% 
-#   distinct()
 ht.all.16.17.18.19 %>% 
   ggTile_yr_season_site2()
 
@@ -2314,22 +2317,24 @@ ht.all.16.17.18.19 %>%
 ```
 
 ```{r}
-#
-# prod.sprcag.ht %>% 
-#   tabyl(site)
+# COMBINE prod and sprcag object with the ht.all from ht.all.16.17.18.19
 
+# type convert wilid for rbind
 prod.sprcag.ht <- prod.sprcag.ht %>% 
   mutate(wilid = as.integer(wilid))
-  
-# fix 
-ht.all.16.17.18.19 %>% ggTile_yr_season_site2()
 
+# bind 
 ht.all.01.19 <- ht.all.16.17.18.19 %>% 
   bind_rows(.,prod.sprcag.ht) %>% 
   mutate(site2 = paste0(site,"-",plot)) %>% 
   mutate(wilid_full = paste0(site2,"-",wilid)) %>% 
   filter(!is.na(pl_ht_cm)) %>% 
   distinct()
+
+# fix 
+ht.all.16.17.18.19 %>% ggTile_yr_season_site2()
+
+
 
 ht.all.01.19 %>% 
   visdat::vis_dat()
@@ -2405,6 +2410,15 @@ lm.20201118 <- lm.20201118 %>%
 lm.20201118 <- lm.20201118 %>%
   mutate(wilid_full = paste0(site,"-",plot,"-",wilid)) 
 
+```
+
+```{r}
+## some cleaning/renaming
+lm.20201118 <- lm.20201118 %>%
+  mutate(yr = as.character(yr)) %>% 
+  mutate() %>% 
+  mutate(wilid = as.integer(wilid)) %>% 
+  rename(pl_ht_cm = height_cm)
 
 ```
 
@@ -2430,15 +2444,6 @@ lm.20201118 %>%
   datatable(rownames = FALSE, caption = "Count of records by season, File: MIssingWillowRecordsFromLewis_20201118.csv")
 ```
 
-```{r}
-## some cleaning/renaming
-lm.20201118 <- lm.20201118 %>%
-  mutate(yr = as.character(yr)) %>% 
-  mutate() %>% 
-  mutate(wilid = as.integer(wilid)) %>% 
-  rename(pl_ht_cm = height_cm)
-
-```
 
 ```{r}
 lm.20201118 %>% 
@@ -2456,7 +2461,6 @@ lm.20201118 %>%
 ## create a lookup to compare with previously imported and munged data (e.g., prod files)
 lm.20201118.wilid_full.lu <- lm.20201118 %>%
   distinct(wilid_full) 
-
 
 ```
 
@@ -3072,9 +3076,9 @@ ht.combined %>%
 ```
 
 ```{r}
-## more filtering
-ht.combined <- ht.combined %>% 
-  filter(pl_ht_cm < 600)
+## more filtering. I'll leave it to TH to remove
+# ht.combined <- ht.combined %>% 
+#   filter(pl_ht_cm < 600)
 
 # fix glen
 ht.combined <- ht.combined %>% 
@@ -3106,7 +3110,7 @@ ht.combined %>%
 
 ```
 
-```{r, fig.height=10}
+```{r, eval=FALSE, fig.height=10}
 gg.plty1 <- ht.combined %>% 
   ggplot(aes(x = site2, y = pl_ht_cm)) +
   geom_point()  +
@@ -3494,9 +3498,9 @@ ht.combined %>%
 
 ```
 
-# Tom list
+# TH: missing list
 
-TH sent pdf of hist tallies on 20201118
+TH sent pdf of tallies of questionable records on 20201118
 
 ```{r}
 library(tabulizer)
