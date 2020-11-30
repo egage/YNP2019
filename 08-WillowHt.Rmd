@@ -61,7 +61,7 @@ library(summarytools)
 ## Functions
 
 ```{r, functs}
-
+## data import
 read_sheets <- function(file){
   xlsx_file <- file
   xlsx_file %>%
@@ -127,6 +127,19 @@ ggTile_yr_season_site2 <- function(df){
   theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 7)) +
   theme(axis.text.y = element_text(size = 7)) +
   facet_wrap(~season)}
+
+## tile - source
+ggTile_source_yr_season_site2 <- function(df){
+  df %>%
+  group_by(source, yr, season, site2) %>%
+  tally() %>%
+  ggplot(aes(yr, site2)) +
+  geom_tile(aes(fill = n), color = 'white') +
+  viridis::scale_fill_viridis(option = "B") +
+  facet_grid(source ~ season) +
+  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 7)) +
+  theme(axis.text.y = element_text(size = 7))
+}
 
 
 ggTile_yr_season_site <- function(df){
@@ -280,6 +293,10 @@ th.01.15 <- th.01.15 %>%
   rename(wilid = willid) %>% 
   rename(pl_ht_cm = plantht)
 
+## add "source" field to allow tracking
+th.01.15 <- th.01.15 %>%
+  mutate(source = "WillowHt_2001_2015.csv")
+
 ```
 
 ```{r}
@@ -308,6 +325,10 @@ No spring data here, except for 2001.
 ## Continuing with the file downloaded from the GDr 20180321
 w_ht <- read_excel("./data/raw/ht/2016_2017_Data_Entry_Format_WillowHt_2001_2015.xlsx")
 
+## add "source" for tracking
+w_ht <- w_ht %>% 
+  mutate(source = "2016_2017_Data_Entry_Format_WillowHt_2001_2015.xlsx")
+
 w_ht %>%
   # distinct(season)
   mutate(year = as.character(year)) %>% 
@@ -322,200 +343,21 @@ w_ht %>%
 ## yet another file possibly with data...
 w_ht01_17 <- read_excel("data/raw/ht/WillowHt_2001_2017_QAQCd_Version.xlsx")
 
+w_ht01_17 <- w_ht01_17 %>% 
+  mutate(source = "WillowHt_2001_2017_QAQCd_Version.xlsx")
+
 w_ht <- bind_rows(w_ht, w_ht01_17) %>% 
   # select(-c(ID, exp, dam, browse)) %>% 
   filter(plantht != "NA") %>%
   rename(pl_ht_cm = plantht) %>% 
   mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>%   distinct()
 
-## one of hundreds of differences between files: willid vs wilid. For constincy with latter files, I will go with wilid
+## one of dozens of differences between files: willid vs wilid. For consistency with latter files, I will go with wilid
 w_ht <- w_ht %>% 
   rename(wilid = willid)
 ### these files have no species id
 ```
 
-> Interogating other raw files looking for spring data
-
-```{r, eval=FALSE}
-w_ht01_17 %>% 
-  group_by(year, season, site) %>%
-  tally() %>% 
-  ggplot(aes(as.character(year), season)) +
-  geom_tile(aes(fill = n)) +
-  labs(caption = "WillowHt_2001_2017_QAQCd_Version.xlsx")
-# > Still missing spring data...
-```
-
-### Raw DCC spring
-
-```{r}
-## MORE SPRING DATA?!
-## the experimental
-nsf.ht.spr <- read_delim("./data/NSF_DataArchive20180208/Plant_level_spring_current_annual_growth_and_height_on_experimental_plot/willows-plantCAGspring2003-2015.txt", delim = " ")
-
-nsf.ht.spr.obs <- read_delim("./data/NSF_DataArchive20180208/Plant_level_spring_current_annual_growth_and_height_on_observation_plot/OBS-plantCAGspring2009-2013.txt", delim = " ", col_types = "cccccddcccc")
-
-# clean. rename
-nsf.ht.spr <- nsf.ht.spr %>% 
-  select(year, site, plot, species, willid, plantht) %>% 
-  rename(yr = year, wilid = willid, pl_ht_cm = plantht) %>% 
-  mutate(season = "spring")
-
-nsf.ht.spr.obs <- nsf.ht.spr.obs %>% 
-  select(year, site, plot, species, willid, plantht) %>% 
-  rename(yr = year, wilid = willid, pl_ht_cm = plantht)
-
-# 
-nsf.ht.spr <- nsf.ht.spr %>% 
-  # filter(!is.na(pl_ht_cm)) %>%
-  mutate(season = "spring") %>% 
-  mutate(yr = as.character(yr)) %>% 
-  mutate(wilid = as.character(wilid))
-
-nsf.ht.spr.obs <- nsf.ht.spr.obs %>% 
-  filter(!is.na(pl_ht_cm)) %>% 
-  mutate(season = "spring") %>% 
-  mutate(plot = "obs")
-
-## combine obs and exp for spring
-nsf.ht.spr <- bind_rows(nsf.ht.spr,nsf.ht.spr.obs)
-
-# clean
-nsf.ht.spr <- nsf.ht.spr %>%
-  mutate(plot = if_else(is.na(site),"obs",plot)) %>%
-  filter(!is.na(plot))
-
-nsf.ht.spr %>% 
-  # distinct(site)
-  visdat::vis_miss() +
-  labs(caption = "nsf.ht.spr")
-
-nsf.ht.spr %>% 
-  mutate(site2 = paste0(site,"-",plot)) %>% 
-  ggTile_yr_season_site2() +
-  labs(caption = "nsf.ht.spr")
-
-```
-
-```{r}
-
-# nsf.ht.spr %>%
-#   mutate(site2 = paste0(site,"-",plot)) %>% 
-#   group_by(site2, yr) %>% 
-#   tally() %>% 
-#   ungroup() %>% 
-#   ggplot(aes(yr, site2)) +
-#   geom_tile(aes(fill = n)) +
-#   labs(title = "Spring DCC combined obs and exp files", caption = "nsf.ht.spr")
-
-```
-
-### Raw DCC fall
-
-```{r}
-## Fa raw DCC
-nsf.ht.fa.exp <- read_delim("./data/NSF_DataArchive20180208/Plant_level_fall_current_annual_growth_and_height_on_experimental_plot/willows-plantCAGfall2002-2015.txt", delim = " ") %>% 
-  select(year, site, plot, species, willid, height) %>% 
-  rename(yr = year, wilid = willid, pl_ht_cm = height) %>% 
-  mutate(season = "fall")
-
-nsf.ht.fa.obs <- read_delim("./data/NSF_DataArchive20180208/Plant_level_fall_current_annual_growth_and_height_on_observation_plot/OBS_shootCAGfall08-15.txt", delim = " ") %>% 
-  select(year, site, plot, species, willid, height) %>% 
-  rename(yr = year, wilid = willid, pl_ht_cm = height) %>% 
-  mutate(season = "fall")
-
-## combine raw dcc exp and obs
-nsf.ht.fa.expobs <- bind_rows(nsf.ht.fa.exp, nsf.ht.fa.obs) %>% 
-  distinct() %>% 
-  mutate(yr = as.character(yr), wilid = as.character(wilid))
-
-## dcc combined
-dcc.ht.fa.spr <- bind_rows(nsf.ht.fa.expobs, nsf.ht.spr) %>%
-  mutate(wilid = as.character(wilid)) %>% 
-  distinct()
-```
-
-```{r}
-
-# clean. na
-dcc.ht.fa.spr <- dcc.ht.fa.spr %>% 
-  filter(!is.na(pl_ht_cm))
-
-## 
-dcc.ht.fa.spr <- dcc.ht.fa.spr %>% 
-  mutate(plot = if_else(is.na(plot),"obs",plot)) %>% 
-  mutate(wilid_full = paste0(site,"-",plot, "-", wilid)) 
-
-# dcc.ht.fa.spr %>%
-#   visdat::vis_miss()
-
-# dcc.ht.fa.spr %>% 
-#   visdat::vis_guess()
-
-# dcc.ht.fa.spr %>% 
-#   # filter(is.na(species)) %>% 
-#   filter(yr != "910" & yr != "189" & yr !='36415' & yr != "355" & yr != "379") %>% 
-#   distinct(yr, season) %>% 
-#   gt()
-
-## lu export
-# dcc.wilid.spp.lu <- dcc.ht.fa.spr %>% 
-#   distinct(site, plot, species, wilid, wilid_full)
-# 
-# dcc.wilid.spp.lu %>% 
-#   datatable()
-
-## export
-# dcc.wilid.spp.lu %>% 
-#   write_csv("./data/dcc_wilid_spp_lu.csv")
-
-```
-
-```{r}
-### Pre-process data
-# 
-# * Type conversions (e.g., ID's, treatment codes to character) 
-# * Identify then filter NA/missing for "plantht" 
-# * Create fields defining treatment classes and incorporate into siteid ("siteid2", as defined in the water table dataset) 
-# * Create field combining willowid (not unique across all records) with site2  
-# 
-# # RETURN HERE FOR FOR MORE QA QC
-# 
-# # convert willow id, dam, browse, exp to character instead of integer
-# w_ht <- w_ht %>% 
-#   mutate(willid = as.character(willid)) %>% 
-#   mutate(exp = as.character(exp)) %>% 
-#   mutate(dam = as.character(dam)) %>% 
-#   mutate(browse = as.character(browse))
-# 
-# # create table of just the missing/NA for inspection
-# w_ht %>%
-#   filter(plantht == "na" | plantht == "missing" | plantht == "NA") %>% 
-#   datatable(caption = "Records with missing/NA/na for plantht.")
-# 
-# ## filter out "NA", "na" and "missing"; convert "plantht" to numeric; create treatment classes in incorporate into new ID fields for summarization
-# # w_ht <- w_ht %>%
-# #   filter(plantht != "na" & plantht != "missing" & plantht != "NA") %>%
-# #   mutate(plantht = as.numeric(plantht)) %>%
-# #   mutate(treat = case_when(dam == 1 & browse == 0 ~ "DX",
-# #                            dam == 1 & browse == 1 ~ "DC",
-# #                            dam == 0 & browse == 0 ~ "CX",
-# #                            dam == 0 & browse == 1 ~ "CC",
-# #                            dam == 2 & browse == 1 ~ "OBS")) %>%
-# #   mutate(site2 = paste(site, treat, sep = '-')) %>%
-# #   mutate(willid.site2 = paste(willid, site2, sep = '-'))
-# # Note that this doesn't correctly parse the exp and obs sites, as TH pointed out. 
-# # So instead see the following modified code:
-###
-
-```
-
-```{r}
-dcc.ht.fa.spr %>% 
-  mutate(site2 = paste0(site,"-",plot)) %>% 
-  ggTile_yr_season_site2() +
-  labs(caption = "dcc.ht.fa.spr")
-```
 
 ```{r}
 ### w_ht issue
@@ -559,11 +401,163 @@ w_ht <- w_ht %>%
 w_ht %>% 
   visdat::vis_dat()
 
-# w_ht %>%
-#   distinct(site) %>%
-#   View()
+```
+
+
+> Interogating other raw files looking for spring data
+
+```{r, eval=FALSE}
+w_ht01_17 %>% 
+  group_by(year, season, site) %>%
+  tally() %>% 
+  ggplot(aes(as.character(year), season)) +
+  geom_tile(aes(fill = n)) +
+  labs(caption = "WillowHt_2001_2017_QAQCd_Version.xlsx")
+# > Still missing spring data...
+```
+
+### Raw DCC spring
+
+```{r}
+## MORE SPRING DATA?!
+## the experimental
+nsf.ht.spr <- read_delim("./data/NSF_DataArchive20180208/Plant_level_spring_current_annual_growth_and_height_on_experimental_plot/willows-plantCAGspring2003-2015.txt", delim = " ")
+
+## add "source" for tracking
+nsf.ht.spr <- nsf.ht.spr %>% 
+  mutate(source = "DCC - willows-plantCAGspring2003-2015.txt")
+
+###
+nsf.ht.spr.obs <- read_delim("./data/NSF_DataArchive20180208/Plant_level_spring_current_annual_growth_and_height_on_observation_plot/OBS-plantCAGspring2009-2013.txt", delim = " ", col_types = "cccccddcccc")
+
+## add "source" for tracking
+nsf.ht.spr.obs <- nsf.ht.spr.obs %>% 
+  mutate(source = "DCC - OBS-plantCAGspring2009-2013.txt")
+
+# clean. rename. These are (surprise, surprise) inconsistently named
+nsf.ht.spr <- nsf.ht.spr %>% 
+  select(year, site, plot, species, willid, plantht, source) %>% 
+  rename(yr = year, wilid = willid, pl_ht_cm = plantht) %>% 
+  mutate(season = "spring")
+
+nsf.ht.spr.obs <- nsf.ht.spr.obs %>% 
+  select(year, site, plot, species, willid, plantht, source) %>% 
+  rename(yr = year, wilid = willid, pl_ht_cm = plantht)
+
+nsf.ht.spr <- nsf.ht.spr %>% 
+  mutate(season = "spring") %>% 
+  mutate(yr = as.character(yr)) %>% 
+  mutate(wilid = as.character(wilid))
+
+nsf.ht.spr.obs <- nsf.ht.spr.obs %>% 
+  filter(!is.na(pl_ht_cm)) %>% 
+  mutate(season = "spring") %>% 
+  mutate(plot = "obs")
+
+## combine obs and exp for spring
+nsf.ht.spr <- bind_rows(nsf.ht.spr,nsf.ht.spr.obs)
+
+# clean
+nsf.ht.spr <- nsf.ht.spr %>%
+  mutate(plot = if_else(is.na(site),"obs",plot)) %>%
+  filter(!is.na(plot))
 
 ```
+
+Plots for QA on DCC spring files.
+
+```{r}
+nsf.ht.spr %>% 
+  # distinct(site)
+  visdat::vis_miss() +
+  labs(title = "QA plot on raw DCC data", caption ="OBS-plantCAGspring2009-2013.txt, willows-plantCAGspring2003-2015.txt")
+
+nsf.ht.spr %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  ggTile_yr_season_site2() +
+  labs(title = "QA plot on raw DCC data", caption ="OBS-plantCAGspring2009-2013.txt, willows-plantCAGspring2003-2015.txt")
+
+```
+### Raw DCC fall
+
+```{r}
+## Fa raw DCC
+nsf.ht.fa.exp <- read_delim("./data/NSF_DataArchive20180208/Plant_level_fall_current_annual_growth_and_height_on_experimental_plot/willows-plantCAGfall2002-2015.txt", delim = " ") %>% 
+  select(year, site, plot, species, willid, height) %>% 
+  rename(yr = year, wilid = willid, pl_ht_cm = height) %>% 
+  mutate(season = "fall")
+
+## add "source" for tracking
+nsf.ht.fa.exp <- nsf.ht.fa.exp %>% 
+  mutate(source = "DCC - willows-plantCAGfall2002-2015.txt")
+
+#### obs DCC
+nsf.ht.fa.obs <- read_delim("./data/NSF_DataArchive20180208/Plant_level_fall_current_annual_growth_and_height_on_observation_plot/OBS_shootCAGfall08-15.txt", delim = " ") %>% 
+  select(year, site, plot, species, willid, height) %>% 
+  rename(yr = year, wilid = willid, pl_ht_cm = height) %>% 
+  mutate(season = "fall")
+
+## add "source" for tracking
+nsf.ht.fa.obs <- nsf.ht.fa.obs %>% 
+  mutate(source = "DCC - OBS_shootCAGfall08-15.txt")
+
+
+```
+
+Combine raw FALL DCC exp and obs
+```{r}
+## combine raw FALL dcc exp and obs
+nsf.ht.fa.expobs <- bind_rows(nsf.ht.fa.exp, nsf.ht.fa.obs) %>% 
+  distinct() %>% 
+  mutate(yr = as.character(yr), wilid = as.character(wilid))
+
+## dcc combined
+dcc.ht.fa.spr <- bind_rows(nsf.ht.fa.expobs, nsf.ht.spr) %>%
+  mutate(wilid = as.character(wilid)) %>% 
+  distinct()
+
+# qa plot
+# visdat::vis_miss(dcc.ht.fa.spr)
+```
+
+```{r}
+# clean. remove na for pl_ht_cm
+dcc.ht.fa.spr <- dcc.ht.fa.spr %>% 
+  filter(!is.na(pl_ht_cm))
+
+## plot is NA if not exp. Need it explicit if to be used to constitute a wilid_full attribute through paste0
+dcc.ht.fa.spr <- dcc.ht.fa.spr %>% 
+  mutate(plot = if_else(is.na(plot),"obs",plot)) %>% 
+  mutate(wilid_full = paste0(site,"-",plot, "-", wilid)) 
+
+## add 'site2'
+dcc.ht.fa.spr <- dcc.ht.fa.spr %>% 
+  mutate(site2 = paste0(site,"-",plot))
+
+```
+
+```{r}
+## export
+# dcc.wilid.spp.lu %>% 
+#   write_csv("./data/dcc_wilid_spp_lu.csv")
+```
+
+
+QA plot - combined fall and spring DCC data 
+```{r}
+dcc.ht.fa.spr %>% 
+  mutate(site2 = paste0(site,"-",plot)) %>% 
+  ggTile_yr_season_site2() +
+  labs(title = "Raw combined spring and fall DCC", caption = "dcc.ht.fa.spr")
+```
+
+QA plot - combined fall and spring DCC data by source file
+```{r, fig.height=10, fig.width=6}
+## qa plot
+ggTile_source_yr_season_site2(dcc.ht.fa.spr)+
+  labs(title = "Raw combined spring and fall DCC", caption = "dcc.ht.fa.spr")
+```
+
 
 ### Ht from sprcag\*.csv files
 
@@ -575,11 +569,12 @@ files_util_01_15 <- fs::dir_ls("./data/Yell_data_from_Hobbs_drive/Utilization al
 sprcag.files <- enframe(files_util_01_15) %>%
   rename(path = name) %>% 
   select(-value) %>%
-  separate(data = ., col = path, into = c("f1","f2","f3","f4","sprcag_file"), sep = "/", remove = FALSE) %>% 
+  separate(data = ., col = path, into = c("f1","f2","f3","f4","source"), sep = "/", remove = FALSE) %>% 
   select(-starts_with("f"))
 
-sprcag.files %>% 
-  gt()
+sprcag.files %>%
+  gt() %>% 
+  tab_header(title = "sprcag*.csv files")
 
 sprcag.files <- files_util_01_15 %>%
   map_df(~read_csv(., col_types = cols(.default = "c")))
@@ -592,12 +587,17 @@ sprcag.files.ht <- sprcag.files %>%
   select(yr,season, site,plot,wilid,pl_ht_cm) %>% 
   mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>%
   filter(!is.na(pl_ht_cm)) %>% 
-  distinct()
-
-sprcag.files.ht %>% 
-  visdat::vis_dat()
+  distinct() %>% 
+  mutate(source = "sprcag*.csv")
 
 ```
+
+```{r, eval=FALSE}
+## qa plot
+sprcag.files.ht %>% 
+  visdat::vis_dat()
+```
+
 
 ```{r}
 sprcag.files.ht %>% 
@@ -1888,6 +1888,9 @@ u18u19.ht <- u18u19.ht %>%
 u18u19.ht <- u18u19.ht %>%
   mutate(site = case_when(is.na(site) & file_name == "./data/raw/utilization/Raw_2018_Utilization/elk_2018_utilization.xlsx" ~ "elk",
 TRUE ~ site)) 
+
+## add column for tracking
+# Raw_2018_Utilization/elk_2018_utilization.xlsx
 
 u18u19.ht %>% 
   tabyl(site)
@@ -3524,6 +3527,11 @@ tom.tbl %>%
   datatable(rownames = FALSE, caption = "Extract of TH's 'Willow_id_inventory.pdf' file sent 20201118")
 
 ```
+
+```{r}
+##
+```
+
 
 ```{r}
 ht.combined %>% 
