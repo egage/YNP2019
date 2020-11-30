@@ -633,7 +633,8 @@ prod.files.ht <- prod.files %>%
   select(yr,season, site,plot,wilid,pl_ht_cm) %>% 
   mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>%
   filter(!is.na(pl_ht_cm)) %>% 
-  distinct()
+  distinct() %>% 
+  mutate(source = "prod*.csv")
 
 ```
 
