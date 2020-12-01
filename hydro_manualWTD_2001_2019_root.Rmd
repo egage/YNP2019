@@ -23,7 +23,7 @@ opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'cente
 
 ## Introduction  
 
-This document describes data import, wrangling, and merging of manual well measurments collected over the project lifetime. Three primary datasets are processed: 
+This document describes data import, wrangling, and merging of manual well measurements collected over the project lifetime. Three primary datasets are processed: 
 
 1. Manual well measurement data archived on the "Digital Collections of Colorado" (DCC) library site: [Well Measurement Data 2001 - 2015](https://dspace.library.colostate.edu/handle/10217/176158). The assumption was that the DCC data set represents the canonical version of the water table data, to which updates from 2015-2019 should be added. However, there are errors in the DCC repository that also need to be addressed before attempting to update with more recent data.
 
@@ -31,12 +31,13 @@ This document describes data import, wrangling, and merging of manual well measu
 
 3. 2018-2019 data collected by L. Messner
 
-As part of processing, data were evaluted for: 
+As part of processing, data were evaluated for: 
 
 * Inconsistently named factors such as site name or well ID    
 * Missing values  
 * Data values outside of expected range or showing unusual patterns
 
+The main goal of this code is to combine data and address issues inherent to raw data files. Issues originating in the field or on data entry (e.g., missing id, stick-up measurements, etc.) that can't be resolved from raw files are flagged. Specific treatment of issues as missing data (e.g., imputation) is left in the hands of the analyst.
 
 ```{r,echo=FALSE}
 suppressPackageStartupMessages(library(tidyverse))
@@ -45,29 +46,17 @@ suppressPackageStartupMessages(library(sf))
 # library(raster)
 library(janitor)
 library(readxl)
-# library(devtools)
-# install_github("mtennekes/tmaptools")
-# install_github("mtennekes/tmap")
-# suppressPackageStartupMessages(library(tmap))
-# library(tmaptools)
 suppressPackageStartupMessages(library(mapview))
-# library(ggmap)
-# library(ggrepel)
 suppressPackageStartupMessages(library(viridis))
 library(ggExtra)
 library(DT)
 library(lubridate)
 # library(kableExtra)
-suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(skimr)) 
 suppressPackageStartupMessages(library(naniar))
 # suppressPackageStartupMessages(library(trelliscopejs))
 suppressPackageStartupMessages(library(textclean))
-
-## install gt package for tables. Note not on CRAN
-# remotes::install_github("rstudio/gt")
 library(gt)
-
-
 ```
 
 ## Data Import and Initial Processing
@@ -78,6 +67,25 @@ library(gt)
 
 ## bv occ
 lu_site_beav <- read_csv("./data/lu_site_site2_beav.csv")
+
+## tidy version for plotting
+lu_site_beav.tidy <- lu_site_beav %>% 
+  pivot_longer(
+    cols = beav19:beav15,
+    names_to = "bv",
+    values_to = "bv_value"
+  )
+
+## add yr
+lu_site_beav.tidy <- lu_site_beav.tidy %>% 
+  mutate(yr = case_when(bv == "beav19" ~ 2019,
+                        bv == "beav18" ~ 2018,
+                        bv == "beav17" ~ 2017,
+                        bv == "beav16" ~ 2016,
+                        bv == "beav15" ~ 2015,
+                        TRUE ~ 9999)) %>% 
+  mutate(yr = as.integer(yr)) 
+
 
 
 ### try to add spp info to the 18 and 19 
@@ -90,7 +98,21 @@ lu.wilid.spp.v2 <- read_csv("./data/wilid_spp._lu_v2.csv") %>%
 lu.plot <- read_csv("./data/plot_lookup_master.csv",col_types = "ccccc")
 
 
+```
 
+```{r}
+lu_site_beav.tidy %>% 
+  # filter(plot == "obs") %>%
+  group_by(yr, site2, plot, bv_value) %>% 
+  tally() %>% 
+  mutate(n = as.character(n)) %>% 
+  ggplot(aes(yr, n)) +
+  geom_point(aes(color = bv_value, shape = bv_value), size=3) +
+  facet_wrap(~site2, ncol=4) +
+  theme_minimal() +
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
 
 ```
 
@@ -1259,8 +1281,8 @@ sel.01.19 <- sel.01.19 %>%
 ## select multiple years
 sel.01.19 <- sel.01.19 %>% 
   filter(n_by_fullid_yr>1) %>% 
-  filter(!is.na(rwte)) 
-
+  filter(!is.na(rwte)) %>% 
+  distinct()
 ## create file for qa qc
 # sel.01.19 %>% 
 #   tabyl(fullid, yr) %>% 
@@ -1271,14 +1293,14 @@ sel.01.19 <- sel.01.19 %>%
 
 
 ```{r, echo=FALSE, eval=FALSE}
-# sel.01.19 %>% 
-#   group_by(fullid, yr) %>% 
-#   tally() %>% 
-#   ggplot(aes(yr, fullid)) +
-#   geom_tile(aes(fill= n), color = "white") +
-#   theme_gray() +
-#   theme(axis.text.y = element_text(size = 5.7)) +
-#   scale_fill_viridis() 
+sel.01.19 %>%
+  group_by(fullid, yr) %>%
+  tally() %>%
+  ggplot(aes(yr, fullid)) +
+  geom_tile(aes(fill= n), color = "white") +
+  theme_gray() +
+  theme(axis.text.y = element_text(size = 5.7)) +
+  scale_fill_viridis()
 # ggsave("./output/figures/sel_01_19_cnt_tile.png", dpi = 220, height = 49, width = 7.5)
 
 ## cross tab of observations by year and unique fullid
@@ -1444,7 +1466,9 @@ sel.01.19.summary %>%
 
 
 
-## Sandbox: nested workflow
+## Sandbox 
+
+### Nested workflow
 
 
 ```{r, sel_nest, eval = FALSE}
@@ -1475,54 +1499,6 @@ sel.01.19.nest_site %>%
 ```
 
 
-
-## Notes
-
-DCC data re adjusted rwte values, no su or dtw_cm values.
-
-
-**LM notes 2012-12-04**
-
-eb2 UM – Well showed up in 2017 without label in the field. Changed all labels to well 100 for
-2018 and 2019 for UM and 99 with stick up of ~64 cm in eb2 dx.
-lb6 SIU1 600 – Changed to 600 based on GIS and previous notes.
-oxbow 212/214/215 – Changed staff gauge label to 212. GIS discrepancy showed labels 214
-and 215 which were different from the field label 212. Staff gauge was labeled 212 in previous
-years.
-wb2 NA – Changed to 211 to match GPS location.
-wb2 21b – Changed well ID to 211 and site to wb2. This is the upland well labeled in field as
-21/211 which does not correspond to the GPS locations for the well labeled 21.
-wb1 NA – Changed to wb2 and 211 to match well stick up and GPS locations
-elk4 NA – Changed staff gauge “NA” label to staff gauge 221.
-lb6 STU1600 – Changed staff gauge to 600. Only one well had 600 in the label (STU1600
-on well, and 600 in GIS).
-crystal NA – changed wells labeled as NA as 399. Stick up and locations were identical. All
-were in new plots set up in 2018.
-crystal sg – Changed unmarked staff gauges as 999. No label present in the field or location
-recorded in GIS data.
-wb1 21a – Change well ID to 21 and site to wb2 to match GPS data.
-wb1 21b – Changed well ID to 211 and site to wb2. This is the upland well labeled in field as
-21/211 which does not correspond to the GPS locations for the well labeled 21.
-lb2 SG – changed staff gauge 209 and SG to 208. Staff gauge was not labeled in the field
-and GIS had both labels 208 and 209. Staff gauge 208 was present in earlier years (since 2008)
-and there was only one staff gauge present at the site for all years.
-lb6 SG Changed to 651. New staff gauge in 2018.
-wb1 21/211 – Changed site label to wb2 and well label to 211. Upland well always dry and
-labeled 21/211 in the field. Label 21 or 211 does not correspond with the site or GIS positions
-so must be differentiated from well 21 located at wb2.
-oxbow 108/8 – Changed staff gauge label to 108. GIS discrepancy showed label 108 which was
-different from the field label 8. Staff gauge was labeled 108 in previous years.
-oxbow 105/5 – Changed staff gauge label to 105. GIS discrepancy showed label 105 which was
-different from the field label 5. Staff gauge was labeled 105 in previous years.
-crystal NA – Changed well NAs to 399. All were in identical locations and had similar stick ups.
-All located in plots set up in 2018.
-hailbuff175/75 – Changed well label 175/75 to 75. Changed hailbuff to hailbuf.
-elk NA – Inconclusive.
-lb5 39119 – Changed to 5002. Staff gauge added in 2018 and was not labeled in the field.
-eb1 127/27 – Changed to 127. Label was tough to see in the field and 127 lines up with GIS.
-
-
-## WORKING bin 
 
 ```{r, eval = FALSE, fig.height=24, fig.width=9}
 # #### Graphical crap detection
@@ -1823,7 +1799,6 @@ w16c <- w16c %>%
 
 ```{r, eval=FALSE, echo = FALSE}
 #### nesting purrr 
-
 ##### split by site
 w16c.site.split <- w16c %>%  
   group_by(yr, mo, dow, mweek, site) %>%
@@ -1929,3 +1904,67 @@ m@map = m@map %>%
 
 ```
 
+## Notes
+
+DCC data re adjusted rwte values, no su or dtw_cm values.
+
+
+**LM notes 2012-12-04**
+
+eb2 UM – Well showed up in 2017 without label in the field. Changed all labels to well 100 for
+2018 and 2019 for UM and 99 with stick up of ~64 cm in eb2 dx.
+
+lb6 SIU1 600 – Changed to 600 based on GIS and previous notes.
+
+oxbow 212/214/215 – Changed staff gauge label to 212. GIS discrepancy showed labels 214
+and 215 which were different from the field label 212. Staff gauge was labeled 212 in previous
+years.
+
+wb2 NA – Changed to 211 to match GPS location.
+
+wb2 21b – Changed well ID to 211 and site to wb2. This is the upland well labeled in field as
+21/211 which does not correspond to the GPS locations for the well labeled 21.
+
+wb1 NA – Changed to wb2 and 211 to match well stick up and GPS locations
+elk4 NA – Changed staff gauge “NA” label to staff gauge 221.
+
+lb6 STU1600 – Changed staff gauge to 600. Only one well had 600 in the label (STU1600
+on well, and 600 in GIS).
+
+crystal NA – changed wells labeled as NA as 399. Stick up and locations were identical. All
+were in new plots set up in 2018.
+
+crystal sg – Changed unmarked staff gauges as 999. No label present in the field or location
+recorded in GIS data.
+
+wb1 21a – Change well ID to 21 and site to wb2 to match GPS data.
+
+wb1 21b – Changed well ID to 211 and site to wb2. This is the upland well labeled in field as
+21/211 which does not correspond to the GPS locations for the well labeled 21.
+
+lb2 SG – changed staff gauge 209 and SG to 208. Staff gauge was not labeled in the field
+and GIS had both labels 208 and 209. Staff gauge 208 was present in earlier years (since 2008)
+and there was only one staff gauge present at the site for all years.
+
+lb6 SG Changed to 651. New staff gauge in 2018.
+
+wb1 21/211 – Changed site label to wb2 and well label to 211. Upland well always dry and
+labeled 21/211 in the field. Label 21 or 211 does not correspond with the site or GIS positions
+so must be differentiated from well 21 located at wb2.
+
+oxbow 108/8 – Changed staff gauge label to 108. GIS discrepancy showed label 108 which was
+different from the field label 8. Staff gauge was labeled 108 in previous years.
+
+oxbow 105/5 – Changed staff gauge label to 105. GIS discrepancy showed label 105 which was
+different from the field label 5. Staff gauge was labeled 105 in previous years.
+
+crystal NA – Changed well NAs to 399. All were in identical locations and had similar stick ups.
+All located in plots set up in 2018.
+
+hailbuff175/75 – Changed well label 175/75 to 75. Changed hailbuff to hailbuf.
+
+elk NA – Inconclusive.
+
+lb5 39119 – Changed to 5002. Staff gauge added in 2018 and was not labeled in the field.
+
+eb1 127/27 – Changed to 127. Label was tough to see in the field and 127 lines up with GIS.

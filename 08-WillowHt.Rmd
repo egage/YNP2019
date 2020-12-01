@@ -876,15 +876,15 @@ u16.ht <- u16.raw %>%
 
 ## 2017 Production
 
+This reads in and munges data from "2017_Raw_Production_20180423.xlsx", accessed from the team drive after entry by LM+
 ```{r}
 
 p17.raw <- read_excel("./data/raw/production/2017_Raw_Production_20180423.xlsx", col_types = "text") %>% 
   janitor::clean_names()
 
-p17.raw %>% glimpse()
+# p17.raw %>% glimpse()
 
 p17.raw %>% distinct(plot)
-
 
 ## bad plot data entry
 p17.raw <- p17.raw %>%
@@ -898,7 +898,7 @@ p17.raw <- p17.raw %>%
 p17.raw %>%
   tabyl(site, plot) %>% 
   gt() %>% 
-  tab_header(title = "Count of observations in 2017 raw production data")
+  tab_header(title = "Count of observations in 2017_Raw_Production_20180423.xlsx")
 
 ```
 
@@ -910,7 +910,8 @@ p17.raw <- p17.raw %>%
   rename(live_dead = live) %>% 
   mutate(season = "fall") %>% 
   mutate(yr = "2017") %>% 
-  mutate(yr = as.character(yr))
+  mutate(yr = as.character(yr)) %>% 
+  mutate(source = "2017_Raw_Production_20180423.xlsx")
 
 # some cleaning
 p17.raw <- p17.raw %>% 
@@ -918,35 +919,18 @@ p17.raw <- p17.raw %>%
   mutate(plot = if_else(is.na(plot),"obs",plot)) %>%
   mutate(site = case_when(site == "wn" ~ "wb",
          TRUE ~ site)) %>% 
-  mutate(site2 = paste0(site, "-", plot))
+  mutate(site2 = paste0(site, "-", plot)) %>% 
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
 
 ```
 
 ```{r}
 p17.ht <- p17.raw %>% 
-  select(c(yr, season, site, site2, plot, species, wilid, pl_ht_cm)) %>% 
+  select(c(yr, season, site, site2, plot, species, wilid, pl_ht_cm, source)) %>% 
   mutate(wilid_full = paste0(site,"-",plot,"-",wilid))
 
-# p17.ht %>% 
-#   datatable()
-
 ```
 
-```{r}
-# './data/2016_2017_Data_Entry_Format_WillowHt_2001_2015.csv'
-
-# p17.ht <- p17.ht %>% 
-#   left_join(., lu.wilid.spp.v2, by = "wilid_full") %>%
-#   mutate(species = case_when(is.na(species.x)~species.y,
-#                              is.na(species.y)~species.x,
-#                              TRUE ~ "NA")) %>% 
-#   select(-c(species.x, species.y))
-
-p17.ht <- p17.ht %>% 
-  # filter(!is.na(pl_ht_cm)) %>%
-  mutate(pl_ht_cm = as.numeric(pl_ht_cm))
-
-```
 
 ```{r, eval=FALSE}
 # quick check
@@ -959,28 +943,30 @@ p17.ht %>%
 ```
 
 ```{r}
-# p17.ht <- p17.ht 
-
 p17.ht %>% 
   distinct(site2, plot, wilid) %>% 
-  datatable()
+  datatable(caption = "2017_Raw_Production_20180423.xlsx")
 
-p17.ht %>%  distinct(wilid_full) %>% datatable()
+p17.ht %>%
+  group_by(wilid_full) %>%
+  tally() %>% 
+  datatable(caption = "Distinct wilid: 2017_Raw_Production_20180423.xlsx")
 
 ```
+
+There are problematic wilid evident (e.g., wilid = ?, NA for wilid)
 
 ```{r, eval=FALSE}
 
 ## issue with obs plots having 
 p17.ht %>% 
   ggTile_yr_season_site2() +
-  labs(caption = "p17.ht")
+  labs(caption = "2017_Raw_Production_20180423.xlsx")
 
 ```
 
 ## 2017 Utilization
-
-Source: *2017_Raw_Utilization.xlsx*
+This reads in and munges data from *2017_Raw_Utilization.xlsx*, accessed from the team drive after entry by LM+
 
 ```{r}
 # 2017 utilization
@@ -999,11 +985,12 @@ u17.raw <- u17.raw %>%
 u17.raw <- u17.raw %>% 
   mutate(site = if_else(site == "elk5 ?", "elk5", site)) %>%
   mutate(plot = if_else(is.na(plot),"obs",plot)) %>%
-  mutate(site2 = paste0(site, "-", plot)) 
+  mutate(site2 = paste0(site, "-", plot)) %>% 
+  mutate(source = "2017_Raw_Utilization.xlsx")
 
 u17.raw <- u17.raw %>%
   filter(!is.na(pl_ht_cm)) %>%  
-  select(c(yr, site, site2, plot, wilid, season, yr, pl_ht_cm)) %>% 
+  select(c(yr, site, site2, plot, wilid, season, yr, pl_ht_cm, source)) %>% 
   mutate(pl_ht_cm = as.numeric(pl_ht_cm)) # 
 
 # seems like an obvious outlier, but will retain so TH can decide
@@ -1016,15 +1003,14 @@ u17.raw <- u17.raw %>%
 u17.ht <- u17.raw %>%
   distinct()
 
-u17.ht <- u17.ht %>% 
-  filter(!is.na(wilid))
+u17.ht %>% 
+  filter(is.na(wilid)) %>% 
+  gt() %>% 
+  tab_header(title = "Missing wilid from 2017_Raw_Utilization.xlsx")
+
 ```
 
 ```{r}
-u17.ht %>% 
-  visdat::vis_dat() +
-  labs(caption = "u17.ht")
-
 u17.ht <- u17.ht %>% 
   mutate(plot = case_when(site2 == "elk4-35" ~"obs",
                           TRUE ~ plot)) %>%
@@ -1035,10 +1021,16 @@ u17.ht <- u17.ht %>%
 
 ```
 
+QA plots:
 ```{r}
-## qa plot
+## qa plots
 u17.ht %>% 
-  ggTile_yr_season_site2() 
+  ggTile_yr_season_site2() +
+  labs(caption = "2017_Raw_Utilization.xlsx")
+
+u17.ht %>% 
+  visdat::vis_dat() +
+  labs(caption = "2017_Raw_Utilization.xlsx")
 
 ```
 
@@ -1050,6 +1042,15 @@ gg.u17 <- u17.ht %>%
   coord_flip()
 
 plotly::ggplotly(gg.u17)
+# this plot reveals a mis-entered ht of 3119. I checked the raw file it should be 319
+
+```
+
+```{r}
+# plot reveals a mis-entered ht of 3119. I checked the raw file it should be 319. Change
+u17.ht <- u17.ht %>% 
+  mutate(pl_ht_cm = case_when(pl_ht_cm == 3119 ~ 319,
+         TRUE ~ pl_ht_cm))
 
 ```
 
@@ -1085,22 +1086,26 @@ read_sheets_prod18exp <- function(file){
 
 p18 <- files2018 %>% 
   map_df(~ read_sheets_prod18(.)) %>% 
-  clean_names()
+  clean_names() %>% 
+  mutate(source = str_remove(file_name, "./data/raw/production/Raw_2018_Production/"))
+
+## create a "source" field for tracking
 
 p18.obs <- obs.files2018 %>% 
   map_df(~ read_sheets_prod18(.)) %>% 
-  clean_names()
+  clean_names() %>% 
+  mutate(source = str_remove(file_name, "./data/raw/production/Raw_2018_Production/"))
 
 p18.exp <- exp.files2018 %>% 
   map_df(~ read_sheets_prod18exp(.)) %>% 
-  clean_names()
+  clean_names() %>% 
+  mutate(source = str_remove(file_name, "./data/raw/production/Raw_2018_Production/"))
 
 
 ```
 
-```{r}
-glimpse(p18.exp)
-
+```{r, eval=FALSE}
+### qa
 p18.exp %>% 
   select(!contains("x")) %>% 
   visdat::vis_dat() +
@@ -1109,36 +1114,39 @@ p18.exp %>%
 
 p18.exp %>% 
   filter(!is.na(sl)) %>% 
-  # datatable()
-  tabyl(file_name) %>% 
+  tabyl(source) %>% 
   gt() %>% 
-  tab_header(title = "2018 production data", subtitle = "Raw input files")
-## each of the sites has data entered into a separate, single-abbed excel file
+  tab_header(title = "2018 production data", subtitle = "Raw input files: exp")
 
-p18.exp %>% 
-  filter(!is.na(sl)) %>%
-  select(file_name,sl)
-  
-## different structure to excel files
-# p18 %>% 
-#   filter(!is.na(date))%>% 
-#   distinct(file_name, sheet_name) %>% 
-#   gt()
+p18.obs %>% 
+  filter(!is.na(sl)) %>% 
+  tabyl(source) %>% 
+  gt() %>% 
+  tab_header(title = "2018 production data", subtitle = "Raw input files: obs")
+
+## each of the sites has data entered into a separate, single-tabbed excel file
 
 ```
 
+
 ```{r}
-###
+### work with the combined obj and exp import
 p18 <- p18 %>% 
   janitor::clean_names() %>% 
   mutate(yr = 2018) %>%
   mutate(yr = as.character(yr)) %>% 
   mutate(season = "fall")
-```
-
-```{r}
 
 ```
+
+```{r, eval=FALSE}
+p18 %>% 
+  tabyl(source) %>% 
+  gt() %>% 
+  tab_header(title = "2018 production data", subtitle = "Raw input files")
+
+```
+
 
 ```{r}
 ## 
@@ -1150,7 +1158,7 @@ p18 <- p18 %>%
 
 ```{r, eval = TRUE}
 
-# specific fixes
+# specific fix
 p18 <- p18 %>% 
   mutate(site = case_when(is.na(site) & wilid == "408" ~ "elk",
                            TRUE ~ site))
@@ -1160,33 +1168,54 @@ p18 <- p18 %>%
 ```{r}
 ## Select subset and type cast
 p18sel <- p18 %>% 
-  select(yr, season, spp, site, plot, wilid, pl_ht_cm) %>%   mutate(pl_ht_cm = as.numeric(pl_ht_cm))
+  select(yr, season, spp, site, plot, wilid, pl_ht_cm, source) %>%
+  mutate(pl_ht_cm = as.numeric(pl_ht_cm)) %>% 
+  distinct()
 
+```
+# >
+```{r}
 # Not all plots are attributed with plot type
 # Replace obs for NA
+p18sel %>% filter(is.na(plot))
+
+
 p18sel <- p18sel %>% 
   mutate(plot = if_else(condition = is.na(plot), true = "obs", plot)) 
 
 p18sel <- p18sel %>% 
   filter(!is.na(site)) # NA for site are also na for ht so are eliminated
+```
 
-# p18sel %>% 
-#   visdat::vis_dat()
 
-# eliminate duplicate rows 
-p18sel <- p18sel %>% 
-  distinct()
+```{r}
+p18sel %>%
+  visdat::vis_miss() +
+  labs(caption = "Source: 2018 production data(many source xlsx files)")
 
-p18sel <- p18sel %>%
-  filter(!is.na(site))
+```
 
+
+
+
+```{r}
 ### missing willow id
 p18sel %>% 
   filter(is.na(wilid)) %>% 
   gt() %>% 
-  tab_header(title = "2018 production: missing 'wilid'")
+  tab_header(title = "2018 production files: missing 'wilid'")
 
 ```
+
+
+```{r}
+p18sel %>% 
+  tabyl(source) %>% 
+  gt() %>% 
+  tab_header(title = "2018 production data", subtitle = "Raw input files (numerous)")
+
+```
+
 
 ```{r}
 # p18sel %>% 
