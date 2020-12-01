@@ -13,9 +13,6 @@ output:
 # knitr::opts_chunk$set(echo = TRUE)
 library(knitr)
 opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'center')
-# opts_knit$set(root.dir=normalizePath('../')) # this is required if Rmd is nested below the project directory
-
-# opts_chunk$set(fig.path = "../output/figures/") # corrected path and added dev. Needed to specify a subdirectory for figs
 
 ```
 
@@ -23,7 +20,7 @@ opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'cente
 
 ## Introduction  
 
-This document describes data import, wrangling, and merging of manual well measurements collected over the project lifetime. Three primary datasets are processed: 
+This document describes data import, wrangling, and merging of manual well measurements collected over the project lifetime. Three primary data sets are processed: 
 
 1. Manual well measurement data archived on the "Digital Collections of Colorado" (DCC) library site: [Well Measurement Data 2001 - 2015](https://dspace.library.colostate.edu/handle/10217/176158). The assumption was that the DCC data set represents the canonical version of the water table data, to which updates from 2015-2019 should be added. However, there are errors in the DCC repository that also need to be addressed before attempting to update with more recent data.
 
@@ -59,12 +56,15 @@ suppressPackageStartupMessages(library(textclean))
 library(gt)
 ```
 
+```{r, echo=FALSE}
+run.date <- format(Sys.time(), '%Y%m%d')
+```
+
 ## Data Import and Initial Processing
 
 ### Lookup tables
-```{r}
+```{r, echo=FALSE}
 # lookup
-
 ## bv occ
 lu_site_beav <- read_csv("./data/lu_site_site2_beav.csv")
 
@@ -100,22 +100,23 @@ lu.plot <- read_csv("./data/plot_lookup_master.csv",col_types = "ccccc")
 
 ```
 
-```{r}
+```{r, eval=FALSE,, echo=FALSE, fig.height=8, fig.width=6}
 lu_site_beav.tidy %>% 
-  # filter(plot == "obs") %>%
+  filter(plot == "obs") %>%
   group_by(yr, site2, plot, bv_value) %>% 
   tally() %>% 
   mutate(n = as.character(n)) %>% 
   ggplot(aes(yr, n)) +
   geom_point(aes(color = bv_value, shape = bv_value), size=3) +
   facet_wrap(~site2, ncol=4) +
-  theme_minimal() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) +
   theme(axis.title.y=element_blank(),
         axis.text.y=element_blank(),
-        axis.ticks.y=element_blank())
+        axis.ticks.y=element_blank()) +
+  labs(x= "", color ="", shape = "", caption = "Beaver occupancy from './data/lu_site_site2_beav.csv'")
 
 ```
-
 
 ### 2001-2015 (DCC Collection)
 
@@ -129,13 +130,10 @@ wt.nsf.meta <- wt.nsf.meta %>%
 
 ```
 
-```{r, warning=FALSE}
-# **Field names from metadata file on DCC repository site**
-# 
-# This is a direct reading of the metadata file in the DCC site.
-# wt.nsf.meta %>%
-#   gt()
-
+```{r}
+wt.nsf.meta %>% 
+  gt() %>% 
+  tab_header(title = "Raw DCC metadata", subtitle = "Source: Yell_Well_Data_Manual2001_2015_METADATA.csv")
 ```
 
 
@@ -148,7 +146,7 @@ wt.nsf <- wt.nsf %>%
 
 ```
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 # use some functions in skimr pkg to evaluate missing values.
 s1 <- skimr::skim(wt.nsf)
 s1
@@ -158,12 +156,15 @@ s1
 #   arrange(-value) %>% 
 #   datatable()
 
-# the naniar package also has some nice features...
-# visualize type
 
-visdat::vis_dat(wt.nsf)
 
 ```
+
+```{r}
+visdat::vis_dat(wt.nsf) +
+  labs(title = "DCC manual water table measurements", caption = "Source: Yell_Well_Data_Manual2001_2015.txt")
+```
+
 
 ```{r, eval=FALSE}
 # > **Questions/Issues:**    
@@ -550,12 +551,9 @@ wt.nsf <- wt.nsf %>%
 
 ### 2015-2017 Data
 
-```{r}
-# Files were sourced from D. Kotter's Google Drive. These appear to be the 2015 to 2017 manual well data, although it's unclear what files are most complete because there are multiple files containing manual measurements. 
-# 
-# **Source file uploaded on 20181022 to Google Team Drive:** https://drive.google.com/drive/u/1/folders/15F7-felMcqAWp1PCgU_Mukpf7LDvlpAM?ogsrc=32
+Files were sourced from D. Kotter's Google Drive. These appear to be the 2015 to 2017 manual well data, although it's unclear what files are most complete because there are multiple files containing manual measurements.
 
-```
+Source file uploaded on 20181022 to Google Team Drive:** https://drive.google.com/drive/u/1/folders/15F7-felMcqAWp1PCgU_Mukpf7LDvlpAM?ogsrc=32
 
 Two separate source files contain WT measurements:
 
@@ -599,7 +597,7 @@ w16c <- bind_rows(w16_1,w16_2) %>%
 w16c <- w16c %>% 
   mutate(rwte = (dtw-su)*-1)
 
-## add distinc year, doy fields. Remove extra character in the "well_id" field (needed for later combination)
+## add distinct year, doy fields. Remove extra character in the "well_id" field (needed for later combination)
 w16c <- w16c %>% 
   mutate(yr = lubridate::year(date)) %>% 
   mutate(doy = lubridate::yday(date)) 
@@ -635,6 +633,7 @@ w16c %>%
   # distinct(site) %>% 
   datatable(rownames = FALSE, caption = "Distinct 'site' values before cleaning")
 
+# a mess...
 ```
 
 
@@ -770,19 +769,31 @@ w16c <- w16c %>%
   mutate(wid = str_extract(w16c$well_id, "\\-*\\d+\\.*\\d*")) 
 
 
-## filtering out specific problems
-w16c <- w16c %>% 
-  filter(!well_id == "??") %>% 
-  filter(!well_id == "y") %>% 
-  filter(!well_id == "z") %>% 
-  filter(!well_id == "x") %>%
-  filter(!well_id == "unreadable") %>%
-  filter(!well_id == "unknown") %>%
-  filter(!well_id == "missing") %>% 
-  filter(!well_id == "38.799999999999997") %>% #parsing error? 
-  filter(!well_id == "17.899999999999999") %>% 
-  filter(!well_id == "chewed up cap")
+```
 
+```{r}
+### create a 'flagged' field for bad entries
+w16c <- w16c %>% 
+  mutate(flagged = case_when(well_id == "??" ~ "well_id = ??",
+               well_id == "??" ~ "bogus well_id",
+               well_id == "y" ~ "bogus well_id",
+               well_id == "z" ~ "bogus well_id",
+               well_id == "x" ~ "bogus well_id",
+               well_id == "unreadable" ~ "bogus well_id",
+               well_id == "unknown" ~ "bogus well_id",
+               well_id == "missing"~ "bogus well_id", 
+               well_id == "38.799999999999997"~ "bogus well_id",
+               well_id == "17.899999999999999"~ "bogus well_id",
+               well_id == "chewed up cap"~ "bogus well_id"))
+
+## create a table for of flagged observations
+w16c %>% 
+  filter(!is.na(flagged)) %>% 
+  select(c(site, well_id, su, dtw, sourceFile, comment)) %>% 
+  gt() %>% 
+  tab_header(title = "Flagged measurements", subtitle = "Source: wtmeasurements.xlsx")
+
+## mod the well_id for oddballs (e.g., 'metal well')
 w16c <- w16c %>% 
   mutate(well_id = case_when(comment == "metal well" ~ "metalwell",
                             well_id == "metal" ~ "metalwell",
@@ -791,40 +802,44 @@ w16c <- w16c %>%
 w16c <- w16c %>% 
   mutate(date=as.Date(date))
      
+
+```
+```{r}
 w16c %>% 
   filter(is.na(wid)) %>% 
-  # write_csv("./temp_export4qaqc/weird_well_ids2qaqc.csv")
-  # tabyl(well_id, site) %>%
   select(date, site, well_id) %>% 
-  # distinct(site, well_id) %>%  
-  # write_csv("./temp_export4qaqc/weird_well_ids2qaqc.csv")
-  datatable()
-
-# w16c %>%
-#   tabyl(site) %>% 
-#   # distinct(site) %>% 
-#   arrange(desc(n)) %>% 
-#   datatable(rownames = FALSE, caption = "Distinct 'site' values after cleaning")
-
-## took us from 96 to 45 distinct'site'
-
-##### Create New Well ID that strips out the character part of well id -- just the numeric
-w16c <- w16c %>% 
-  mutate(fullID = paste0(site,"-",wid)) %>%  # there are duplicates for well_id and date combinations, so there must not be unique values for the different well_ids. 
-  mutate(date = as.Date(date))
-
-# still seem to have 4 NA
-# w16c %>%
-#   filter(is.na(site)) %>%
-#   dplyr::select(1:6) %>%
-#   datatable(rownames = FALSE, caption = "The 4 records with 'NA' for 'site'. Dropped moving forward.")
+  datatable(caption = "NA for well_id. Many are SG...")
 ```
 
 
 ```{r}
-# Filter out records with missing values for 'site'
+##### Create New Well ID that strips out the character part of well id -- just the numeric
 w16c <- w16c %>% 
+  mutate(fullID = paste0(site,"-",wid)) # %>%  # there are duplicates for well_id and date combinations, so there must not be unique values for the different well_ids. 
+
+w16c <- w16c %>% 
+  mutate(date = as.Date(date)) %>% 
   filter(!is.na(site))
+
+```
+
+```{r}
+# add 'well_sg' column 
+w16c <- w16c %>%
+  mutate(well_sg = case_when(well_id == "e191" ~ "sg",
+                             well_id == "sg191" ~ "sg",
+                             well_id == "sg" ~ "sg",
+                             # is.na(su) & is.na(rellevel) ~ "sg",
+                             well_id == str_detect(well_id, pattern = "sg*") ~ "sg",
+                             str_detect(well_id, "sg") ~ "sg",
+                             well_id == "sg2" ~ "sg",
+                             TRUE ~ "well"))
+```
+
+### pull out SG
+```{r}
+w16c.sg <- w16c %>% 
+  filter(well_sg == "sg")
 
 ```
 
@@ -832,9 +847,9 @@ w16c <- w16c %>%
 
 ```{r}
 
-w16c %>% 
-  filter(is.na(dtw)) %>% 
-  datatable(caption = "Records with 'NA' for 'dtw'")
+# w16c %>% 
+#   filter(is.na(dtw)) %>% 
+#   datatable(caption = "Records with 'NA' for 'dtw'")
 
 # Filter out records with missing values for 'dtw'
 w16c <- w16c %>% 
@@ -854,7 +869,8 @@ Many but not all of these were eliminated in the last step. This explicitly iden
 w16c %>% 
   filter(str_detect(comment, pattern = "dry") | str_detect(comment, pattern = "DRY")) %>%
   select(site, date, dtw, comment) %>%
-  gt()
+  gt() %>% 
+  tab_header(title = "Dry wells", subtitle =  "Source: wtmeasurements.xlsx")
 
   # datatable(rownames = FALSE, caption = "Records noted as 'dry' after eliminating records with 'NA' for wtd")
 
@@ -868,7 +884,7 @@ w16c <- w16c %>%
 
 ```{r}
 # >Identify the records with distinct values in the "comments" field after eliminating the 'dry' wells 
-# Some of these are staff gages. A few may actaully be usable wells. But for now, they are getting dropped.
+# Some of these are staff gages. A few may actually be usable wells. But for now, they are getting dropped.
 
 # w16c %>% 
 #   distinct(comment) %>% 
@@ -886,16 +902,20 @@ w16c <- w16c %>%
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 # Identify and eliminate remaining records with 'NA' for 'well_id'  
 w16c %>% 
   filter(is.na(well_id)) %>% 
-  select(-c(tl,td,time, doy,sourceFile)) %>%
+  select(-c(tl,td,time, doy)) %>%
   datatable(caption = "Records with NA for well_id")
   # write_csv("output/temp_wells_with_noIDdatatable.csv")
 
 ```
 
+```{r}
+w16c %>% 
+  filter(is.na(well_id))
+```
 
 
 ```{r}
@@ -903,8 +923,7 @@ w16c %>%
 # There might be a few SG to remove...
 w16c %>% 
   filter(str_detect(well_id, "^S")) %>% 
-  datatable(rownames = FALSE, caption = "Records with a 'well_id' values starting with 'S'.")## note use of filter to remove records startng with 'S'. This has effect of pulling out some of the SG
-
+  datatable(rownames = FALSE, caption = "Records with a 'well_id' values starting with 'S'.")
 ## eliminate these...
 w16c <- w16c %>% 
   filter(!str_detect(well_id, "^S"))
@@ -925,15 +944,17 @@ w16c <- w16c %>%
 ## print out the is.na(rwte) records
 # >Records with "NA" for "rwte": **For now, eliminating. These include SG as well as errors**
 
-w16c <- w16c %>%
-  mutate(well_sg = case_when(well_id == "e191" ~ "sg",
-                             well_id == "sg191" ~ "sg",
-                             well_id == "sg" ~ "sg",
-                             # is.na(su) & is.na(rellevel) ~ "sg",
-                             well_id == str_detect(well_id, pattern = "sg*") ~ "sg",
-                             str_detect(well_id, "sg") ~ "sg",
-                             well_id == "sg2" ~ "sg",
-                             TRUE ~ "well"))
+```
+
+```{r}
+# pull out sg
+w16c.sg <- w16c %>% 
+  filter(well_sg == "sg") %>% 
+  select(-c(doy))
+```
+
+
+```{r}
 w16c %>% 
   select(well_sg, site, well_id, wid, su, dtw, date) %>% 
   datatable(rownames = FALSE)
@@ -942,9 +963,6 @@ w16c %>%
   filter(is.na(rwte)) %>% 
   datatable(caption = "Records with 'NA' for 'rwte' after previous filtering steps.",
             filter = list(position = 'top', clear = FALSE))
-
-w16c %>% 
-  filter(well_sg == "well")
 
 ```
 
@@ -956,9 +974,8 @@ w16c.wells <- w16c %>%
 
 ```
 
-
-
-```{r}
+```{r, echo=FALSE, eval=FALSE}
+## qa
 # >Records with "NA" for "wid": **For now, eliminating.**
 # there shouldn't be duplicates for the well_id_site combination
 # But there are...
@@ -970,7 +987,7 @@ w16c %>%
   filter(ndistinct.site.date > 1) %>% 
   select(well_sg, wid, site, well_id, fullID, ndistinct.site.date, rwte, su, date) %>%
   arrange(fullID,date) %>% 
-  # distinct() %>% 
+  distinct() %>%
   # write_csv(path = "output/temp_to_delete/TEMP_well_id_qc.csv") %>% 
   datatable(rownames = FALSE, caption = "Duplicate fullID/date combinations. There should only be one, right?")
 
@@ -981,33 +998,19 @@ w16c %>%
 
 ```{r}
 w16c <- w16c %>%
-  select(well_sg, wid, site, well_id, fullID, rwte, su, dtw, date) %>% 
+  select(well_sg, wid, site, well_id, fullID, rwte, su, dtw, date, well_sg, flagged) %>% 
   distinct() 
+```
 
-
-## select just wells
-w16c <- w16c %>% 
-  filter(well_sg != "sg")
-
-## this still leaves 14 duplicates
-w16c %>%
-  group_by(fullID, date) %>% 
-  mutate(ndistinct.site.date = n()) %>% 
-  # tally() %>% 
-  filter(ndistinct.site.date > 1) %>% 
-  arrange(fullID,date) %>% 
-  # write_csv("output/temp_to_delete/man_well_duplicate_date_fullID.csv")
-  datatable(rownames = FALSE, caption = "Duplicate records for fullID and date. The duplicates due to the two source files have already been removed, so these are something else that needs to be addressed.")
-
-## some issues can be fixed. For example, well_id "w of 36" is clearly not well 36. Others are more confusing.
-
+```{r}
 ## for now, going to eliminate
 w16c <- w16c %>%
   group_by(fullID, date) %>% 
   mutate(ndistinct.site.date = n()) %>% 
   # tally() %>% 
   filter(ndistinct.site.date == 1) %>% 
-  ungroup()
+  ungroup() %>% 
+  select(-ndistinct.site.date)
 
 ```
 
@@ -1031,31 +1034,33 @@ w16c <- w16c %>%
 #   filter(cnt.rec ==1) %>% 
 #   filter(str_detect(well_id, "^S")) 
 
-# if we want all values except those with digits, we could say:
-# mtcars %>% 
-#   filter(!str_detect(rowname, "\\d"))
-
 ```
 
+### Clean DCC for merge
 
 ```{r}
 #### clean the DCC for merge
 # nsfclean
-
-#### WORK ON THIS SECTION. 
+## add "flag"
 wt.nsf <- wt.nsf %>% 
   filter(!is.na(rellevel)) %>% 
-  filter(rellevel != 777) %>% # there are codes of 777, 888, and 999. Need to find metadata and decode
-  filter(rellevel != 888) %>%
-  filter(rellevel != 999)
+  mutate(flag = case_when(rellevel == 777 ~ "coded 777",
+    rellevel == 888 ~ "coded 888",
+    rellevel == 999 ~ "coded 999"))
 
-# wt.nsf %>%
-#   summarise(min_relelev = min(rellevel), max_relelev = max(rellevel))
-  
-### units??
-# mutate(rellevel = rellevel * 100)  ###### assumes were in m, mult by 100 for cm
+
 
 ```
+
+There are values of 777, 888, and 999 for 'rwte'. These are flagged and identified in a table. See if LM knows what these codes mean.
+```{r}
+# there are codes of 777, 888, and 999. Need to find metadata and decode
+wt.nsf %>%
+  filter(!is.na(flag)) %>% 
+  datatable(caption = "Flagged observations")
+
+```
+
 
 
 ```{r}
@@ -1063,20 +1068,6 @@ wt.nsf <- wt.nsf %>%
 wt.nsf <- wt.nsf %>%
   rename(date = date) %>% 
   mutate(fullid = paste0(site,"-",wat_id)) 
-
-wt.nsf %>% 
-  distinct(site) %>% 
-  gt()
-
-# wt.nsf %>% 
-#   distinct(fullid) %>% 
-#   arrange(fullid) %>% 
-#   datatable()
-
-##### clean up
-# Some rows have no wat_id. Dump
-wt.nsf <- wt.nsf %>% 
-  filter(!is.na(wat_id))
 
 ```
 
@@ -1086,11 +1077,26 @@ well.coord <- wt.nsf %>%
   dplyr::select(fullid, x,y,z) %>%
   distinct() # looks fu
 
+well.coord <- well.coord %>% 
+  drop_na()
+
+## write to output
+# well.coord %>% 
+#   write_csv(glue::glue('output/processed_data/water_table/manual_well_coords_lu_{run.date}.csv'))
+
+```
+
+```{r}
+# create sf
+well.coord.sf <- st_as_sf(well.coord, coords = c("x","y"), crs = 26912) # utm zone 12, nad83 presumed
+# mapview
+mapview(well.coord.sf, zcol='z')
+
 ```
 
 ```{r}
 ## combine 01-17
-## make consistent names to 16 data
+## make DCC names with consistent with 16 data
 wt.nsf <- wt.nsf %>%
   rename(wid = wat_id) %>% 
   rename(well_id = wat_id2) %>% 
@@ -1099,17 +1105,15 @@ wt.nsf <- wt.nsf %>%
 ## rescale to cm from m and filter out of scale values 
 wt.nsf <- wt.nsf %>% 
   mutate(rwte = rwte*100) %>% 
-  filter(rwte < 60 & rwte > -300) 
+  filter(rwte < 0 & rwte > -300) 
 
 ## select down the fields  
 sel.nsf <- wt.nsf %>% 
-  dplyr::select(su_cm, dtw_cm, site, wid, well_id, fullid, date, rwte) %>% 
+  rename(site_type = site_typ) %>% 
+  dplyr::select(su_cm, dtw_cm, site, wid, well_id, fullid, date, rwte, site_type, flag) %>% 
   mutate(su_cm = as.numeric(su_cm)) %>% 
   mutate(dtw_cm = as.numeric(dtw_cm))
 
-sel.nsf %>% 
-  ggplot(aes(rwte)) +
-  geom_histogram()
 
 sel.16 <- w16c %>%
   rename(su_cm = su) %>% 
@@ -1128,6 +1132,25 @@ sel.01.17 <- sel.01.17 %>%
   filter(well_id != "sg")
 
 ```
+
+```{r}
+sel.nsf %>% 
+  ggplot(aes(rwte)) +
+  geom_histogram() +
+  theme_minimal() +
+  labs(title = "DCC rwte data")
+
+sel.nsf %>% 
+  ggplot(aes(rwte)) +
+  geom_histogram() +
+  theme_minimal() +
+  coord_flip() +
+  facet_wrap(~site) +
+  labs(title = "DCC rwte data")
+
+
+```
+
 
 ### 2018-2019 Data
 
@@ -1357,8 +1380,7 @@ sel.01.19 <- sel.01.19 %>%
 sel.01.19 <- sel.01.19 %>%
   mutate(period = case_when(
     mo == "Jul" | mo == "Aug" | mo == "Sep" ~ "late_summer",
-    mo == "May" | mo == "Jun" ~ "early_summer",
-    TRUE ~ "all_months"))
+    mo == "May" | mo == "Jun" ~ "early_summer"))
 ```
 
 ```{r}
@@ -1381,7 +1403,7 @@ sel.01.19 <- sel.01.19 %>%
 
 sel.01.19.summary <- sel.01.19 %>%
   group_by(site, plot, site2,yr, period) %>% 
-  summarise(rwte_mean = mean(rwte, na.rm = TRUE), rwte_sd = sd(rwte, na.rm = TRUE)) %>% 
+  summarise(n = n(), rwte_mean = mean(rwte, na.rm = TRUE), rwte_sd = sd(rwte, na.rm = TRUE)) %>% 
   pivot_wider(names_from = period, values_from = c(rwte_mean, rwte_sd)) %>% 
   ungroup()
 
@@ -1401,26 +1423,28 @@ sel.01.19.summary %>%
   labs(caption = "Relative water table elevation, experiment sites", x = "year", y = "Relative water table depth (cm)") +
   scale_color_viridis(discrete = TRUE) +
   theme_minimal()
-  
-# sel.01.19.summary %>% 
-#   filter(rwte_mean_late_summer >0)
 
+```
+
+```{r}
 bp1 <- sel.01.19 %>%
   mutate(yr = as.character(yr)) %>% 
   filter(plot != "obs") %>% 
   ggplot(aes(yr, rwte)) +
   geom_boxplot(aes(fill = plot), color = "black", alpha = .5) +
-  facet_wrap(~site) +
+  facet_wrap(~site, ncol=1) +
   theme_minimal() +
-  labs(caption = "late summer rwte")
+  labs(caption = "late summer rwte") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
 bp1
 
 ```
 
+
 ### Bring in plot and site info
 ```{r}
 # 
-# lu_site_beav
+# Beaver
 
 sel.01.19.summary <- sel.01.19.summary %>% 
   # distinct(site, plot) %>% 
@@ -1428,61 +1452,62 @@ sel.01.19.summary <- sel.01.19.summary %>%
   select(-treat) %>% 
   left_join(.,lu_site_beav)
 
-sel.01.19.summary %>% visdat::vis_dat()
-
-# sel.01.19.summary %>%
-#   filter(is.na(beav19)) %>%
-#   View
-
 # sel.01.19.summary %>% 
 #   filter(is.na(site2)) %>% 
 #   View()
 
 ```
-
-
-### Export
-
-#### Raw
+#>
 ```{r}
+sel.01.19.summary %>% 
+  visdat::vis_dat() +
+  labs(title = "Combined manual wt for export", caption = glue::glue('run date:{run.date}'))
+
+```
+
+
+## Export
+
+**Raw**
+```{r, eval=FALSE}
 sel.01.19 <- sel.01.19 %>%
   select(-c(site_general, well_id)) %>% 
   distinct()
 
-# sel.01.19 %>% 
-#   write_csv("./data/processed/manual_well_data_raw_20191220.csv")
-  
+sel.01.19 %>%
+  write_csv("./data/processed/manual_well_data_raw_20201201.csv")
+
 ```
 
-#### Summarized
-
+**Summarized**
 
 ```{r, eval= FALSE}
-
 sel.01.19.summary %>%
-  write_csv("./output/processed_data/manual_WTD_site_mean_20191214_0839.csv")
+  write_csv("./output/processed_data/manual_WTD_site_mean_20201201.csv")
 
 ```
 
 
 
-## Sandbox 
 
-### Nested workflow
+
+
 
 
 ```{r, sel_nest, eval = FALSE}
+## Sandbox 
+### Nested workflow
 #### NEST
 ### return here
 
 sel.01.19.nest_site <- sel.01.19 %>%
-  rename(plot = plot_type) %>% 
   group_by(site, plot) %>% 
   nest() 
 
 sel.01.19.nest_site %>% 
   mutate(vd = map(.x = data,.f = visdat::vis_dat))
 
+## define function
 ggSite <- function(data){
   data %>% 
     ggplot(aes(doy, rwte)) +
@@ -1492,7 +1517,7 @@ ggSite <- function(data){
 sel.01.19.nest_site %>% 
   mutate(ggp = map(.x = data, .f = ggSite)) %>% 
   pluck(4) %>% 
-  pluck(3)
+  pluck(4)
 
 # map2(paste0(plots$country, ".pdf"), plots$plot, ggsave)
 
@@ -1505,9 +1530,9 @@ sel.01.19.nest_site %>%
 # **Heat map: count of observations by "Wat_ID2" and "Site2"**
 wt.nsf %>% 
   # names()
-  tabyl(wat_id2,site2) %>%
-  gather(key = site2,value = cnt,-wat_id2) %>% 
-  ggplot(aes(site2,wat_id2)) +
+  tabyl(fullid,site2) %>%
+  gather(key = site2,value = cnt,-fullid) %>% 
+  ggplot(aes(site2,fullid)) +
   geom_tile(aes(fill=cnt), color="grey") +
   # scale_fill_gradient(low = "white", high = "darkred") +
   scale_fill_gradient2(low = "white", mid = "blue", high = "red", midpoint = 45, space = "Lab", na.value = "grey50", guide = "colourbar") +
@@ -1516,8 +1541,6 @@ wt.nsf %>%
   theme(axis.text.x=element_text(angle=45, hjust=1))
 
 ```
-
-
 
 ```{r, eval = FALSE, fig.height=24, fig.width=9}
 
