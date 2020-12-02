@@ -109,10 +109,10 @@ visdat::vis_dat(wt.nsf)
 # **Comparison of the number of unique values among fields (_n unique_)**
 # The site and site2 fields differ in how they encode treatments. "Site" explicitly encodes treatments (e.g., DC, DX, etc.); "Site2" leaves these out. BUT, not consistent...
 
-s1 %>% 
-  filter(stat=="n_unique") %>% 
-  select(-c(level,formatted)) %>% 
-  datatable()
+# s1 %>% 
+#   filter(stat=="n_unique") %>% 
+#   select(-c(level,formatted)) %>% 
+#   datatable()
 # > **Questions/Issues:**    
 # > 1. Which concept of site ("Site" vs. "Site2") should be used going forward? From disucssions on 2018-02-22, the "Site2" approach (once error-corrected) seems like the way?       
 # > 2. How do the different Site ID approaches relate to well ID's? are these unique to "Site", "Site2", or globally distinct? 
@@ -517,9 +517,6 @@ wt.nsf %>%
   tabyl(Site2, Wat_Type) %>%
   adorn_totals("row")
 
-mtcars %>%
-  crosstab(am, cyl) %>%
-  adorn_totals("row")
 
 ```
 
@@ -603,7 +600,7 @@ site.lu <- site.lu %>%
 
 # View(site.lu)
 
-# write to csv that I can modify to create the 'master' lookup. I've inlcuded many variants, but others may be identified. 
+# write to csv that I can modify to create the 'master' lookup. I've included many variants, but others may be identified. 
 
 # site.lu %>% 
 #   gather(key = key,value = value) %>% 
@@ -841,7 +838,7 @@ w16_1 <- w16_1 %>%
 
 
 ## read in the second sketchy file from DK
-w16_2 <- readxl::read_xlsx("data/raw/well_data_manual/WT_measurement2.xlsx") %>% 
+w16_2 <- readxl::read_xlsx("data/raw/well_data_manual/WT_Measurement2.xlsx") %>% 
   janitor::clean_names() %>% 
   mutate(td = as.numeric(td))%>% 
   mutate(sourceFile = "WT_measurement2.xlsx")
@@ -2202,9 +2199,6 @@ name.18 %>%
 name.sel.01.17 <- sel.01.17 %>% 
   distinct(siteGeneral) %>% 
   arrange(siteGeneral) %>% 
-  gt()
-
-name.sel.01.17 %>% 
   gt() %>% 
   tab_header(title = "sel.01.17 Unique siteGeneral")
 ## no crystal  
