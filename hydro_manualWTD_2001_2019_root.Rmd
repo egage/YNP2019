@@ -91,7 +91,7 @@ lu_site_beav.tidy <- lu_site_beav.tidy %>%
 ### try to add spp info to the 18 and 19 
 
 ## change ref system to start with lu
-lu.wilid.spp.v2 <- read_csv("./data/wilid_spp._lu_v2.csv") %>% 
+lu.wilid.spp.v2 <- read_csv("./data/wilid_spp_lu_v2.csv") %>% 
   select(c(species, wilid_full)) %>% 
   distinct()
 
@@ -578,7 +578,7 @@ w16_1 <- w16_1 %>%
 
 
 ## read in the second sketchy file from DK
-w16_2 <- readxl::read_xlsx("data/raw/well_data_manual/WT_measurement2.xlsx") %>% 
+w16_2 <- readxl::read_xlsx("data/raw/well_data_manual/WT_Measurement2.xlsx") %>% 
   janitor::clean_names() %>% 
   mutate(td = as.numeric(td))%>% 
   mutate(sourceFile = "WT_measurement2.xlsx")
@@ -1090,7 +1090,7 @@ well.coord <- well.coord %>%
 # create sf
 well.coord.sf <- st_as_sf(well.coord, coords = c("x","y"), crs = 26912) # utm zone 12, nad83 presumed
 # mapview
-mapview(well.coord.sf, zcol='z')
+# mapview(well.coord.sf, zcol='z')
 
 ```
 
