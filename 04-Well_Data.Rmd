@@ -2,7 +2,7 @@
 
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
 **Updated:** `r format(Sys.time(), '%d %B, %Y')`
@@ -1975,8 +1975,6 @@ well.coord.sf <- well.coord %>%
   filter(x != 999) %>% 
   sf::st_as_sf(coords = c("x", "y"), crs = 26912)
 
-# plot(well.coord.sf)
-
 ## you'll want to figure why it's 999 in the data...
 # well.coord %>% 
 #   filter(x == 999)
@@ -1988,7 +1986,6 @@ well.coord.sf <- well.coord %>%
 ## join the well data to sf coord
 sel.01.17.sf <- dplyr::left_join(well.coord.sf,sel.01.17,by="fullid")
 
-# sel.01.17 %>% View()
 ```
 
 #### Well elevation (m ASL)
@@ -2039,7 +2036,6 @@ minAugRelElev.sf <- sel.01.17.sf %>%
   summarise(min.rlevel = min(rellevel,na.rm = TRUE)) 
 
 mapview(minAugRelElev.sf, zcol = "min.rlevel",legend= TRUE)
-
 
 
 ```
