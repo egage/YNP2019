@@ -1407,8 +1407,6 @@ sel.01.19.summary <- sel.01.19 %>%
   pivot_wider(names_from = period, values_from = c(rwte_mean, rwte_sd)) %>% 
   ungroup()
 
-# sel.01.19.summary %>% 
-#   names()
 ```
 
 ```{r}
@@ -1473,11 +1471,11 @@ Create csv of combined manual water table measurements (existing warts and all).
 **Raw**
 ```{r, eval=FALSE}
 sel.01.19 <- sel.01.19 %>%
-  select(-c(site_general, well_id)) %>% 
+  select(-c(site_general, well_id, n_by_fullid_yr, period)) %>% 
   distinct()
 
 sel.01.19 %>%
-  write_csv("./data/processed/manual_well_data_raw_20201201.csv")
+  write_csv("./data/processed/manual_well_data_raw_20201202.csv")
 
 ```
 
