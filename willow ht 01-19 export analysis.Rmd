@@ -1,0 +1,288 @@
+---
+title: "Willow Height - Data Processing Report"
+output:
+  html_document: 
+    fig_caption: yes
+    fig_height: 8
+    theme: journal
+    toc: yes
+    toc_depth: 2
+    toc_float: no
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+# knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = 'center')
+# opts_knit$set(root.dir=normalizePath('../')) # this is required if Rmd is nested below the project directory
+
+# opts_chunk$set(fig.path = "../output/figures/") # corrected path and added dev. Needed to specify a subdirectory for figs
+
+```
+
+**Updated:** `r format(Sys.time(), '%d %B, %Y, %H:%m')`
+
+
+
+This document summarizes data combined, wrangled, and exported in a separate Rmd file.
+
+
+```{r,echo=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+library(fs)
+suppressPackageStartupMessages(library(sf))
+# library(raster)
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(readxl))
+# library(glue)
+suppressPackageStartupMessages(library(mapview))
+# library(ggmap)
+# library(ggrepel)
+suppressPackageStartupMessages(library(viridis))
+library(ggExtra)
+library(ggrepel)
+library(DT)
+# library(kableExtra)
+# suppressPackageStartupMessages(library(compare))
+suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(dataMaid))
+library(lubridate)
+library(gt)
+```
+
+
+
+```{r, functs_plot}
+# Functions
+
+## plotting
+ggTile_yr_season_site2 <- function(df){
+  df %>%
+  group_by(yr, season, site2) %>%
+  summarise(n= n()) %>%
+  ggplot(aes(yr, site2)) +
+  geom_tile(aes(fill = n), color = 'white') +
+  viridis::scale_fill_viridis(option = "D") +
+  facet_wrap(~season) +
+  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 7)) +
+  theme(axis.text.y = element_text(size = 8)) +
+  facet_wrap(~season)}
+
+ggTile_yr_season_site <- function(df){
+  df %>%
+  group_by(yr, season, site) %>%
+  summarise(n= n()) %>%
+  ggplot(aes(yr, site)) +
+  geom_tile(aes(fill = n), color = 'white') +
+  viridis::scale_fill_viridis(option = "D") +
+  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 7)) +
+  theme(axis.text.y = element_text(size = 8)) +
+  facet_wrap(~season)} 
+
+##
+ggTile_yr_season_plot <- function(df){
+  df %>%
+  group_by(yr, plot, season, site) %>%
+  tally() %>%
+    ungroup() %>% 
+  ggplot(aes(plot, site)) +
+  geom_tile(aes(fill = n), color = 'white') +
+  viridis::scale_fill_viridis(option = "B") +
+  facet_wrap(~season) +
+  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 9)) +
+  theme(axis.text.y = element_text(size = 9)) +
+  facet_wrap(yr~season)
+  } 
+#
+
+ggTile_yr_season_plot_alt1 <- function(df){
+  df %>%
+  group_by(yr, plot, season, site) %>%
+  summarise(n= n()) %>%
+  ggplot(aes(yr, site)) +
+  geom_tile(aes(fill = n), color = 'white') +
+  viridis::scale_fill_viridis(option = "A") +
+  # facet_wrap(~season) +
+  facet_grid(season~plot) +
+  theme(axis.text.x = element_text(angle = 55, hjust = 1, size = 9)) +
+  theme(axis.text.y = element_text(size = 9))
+} 
+
+### ggpoint
+ggPoint_yr_site_season_plot <- function(df){
+  df %>%
+  ggplot(aes(yr, pl_ht_cm)) +
+    geom_point(aes(color = plot, shape = plot)) +
+    facet_wrap(~site, ncol = 4) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 9)) +
+  theme(axis.text.y = element_text(size = 8)) +
+    viridis::scale_color_viridis(discrete = TRUE, option = "C") +
+    labs(y = "Height (cm)")
+} 
+
+
+### gt table summary
+tbqc_exp <- function(df){
+  df %>%
+    filter(plot != "obs") %>% 
+    group_by(site,yr, season, plot) %>% 
+    summarise(n = count(), ht_mean = mean(pl_ht_cm, na.rm = TRUE), ht_sd = sd(pl_ht_cm, na.rm = TRUE)) %>% 
+    gt()
+}
+
+```
+
+
+
+```{r}
+## Read in data
+# ht.combined <- read_csv("./output/processed_data/ht_combined20191221_2053.csv")
+
+ht.combined <- read_csv("./output/processed_data/ht_combined20200107_1618.csv")
+
+ht.combined <- ht.combined %>% 
+  mutate(yr = as.integer(yr))
+
+# ht.combined %>% View()
+
+```
+
+# Observation tallies
+
+## Site tally - all sites/yrs
+
+```{r}
+ht.combined %>% 
+  ggTile_yr_season_site()
+```
+
+## Site tally - exp sites/yrs
+```{r, fig.height=3.5}
+ht.combined %>%
+  filter(plot != "obs") %>% 
+  ggTile_yr_season_site() 
+
+```
+
+
+## Site tally - obs sites/yrs
+```{r, fig.height=4.5}
+ht.combined %>%
+  filter(plot == "obs") %>% 
+  ggTile_yr_season_site() 
+
+```
+
+```{r}
+# ht.combined %>%
+#   filter(plot == "obs") %>%   
+#   ggPoint_yr_site_season_plot
+```
+
+## Site2 tally - exp sites/yrs
+```{r, fig.height=4.5}
+ht.combined %>% 
+  filter(plot != "obs") %>%
+  ggTile_yr_season_site2()
+```
+
+## Site2 tally - obs sites/yrs
+```{r, fig.height=6.75}
+ht.combined %>%
+  filter(plot == "obs") %>%
+  ggTile_yr_season_site2()
+```
+
+# Height plots and summaries
+```{r}
+## summarize by site2 and year using skimr
+summary.by.site2 <- ht.combined %>% 
+  filter(!is.na(site)) %>% 
+  mutate(year = as.factor(yr)) %>% 
+  group_by(site, season, plot, site2,yr) %>%
+  nest() %>% 
+  mutate(skim2 = map(data,skim)) %>% 
+  unnest(skim2) %>% 
+  ungroup()
+```
+
+## Median heights - exp plots, site, plot, yr
+
+>Suspect value for spring eb2 in 2015. Filtered out.
+
+```{r, eval=TRUE}
+## line plot
+pltly3 <- summary.by.site2 %>%
+  mutate(yr = as.integer(yr)) %>% 
+  filter(skim_variable == 'pl_ht_cm') %>%
+  filter(plot != "obs") %>% 
+  filter(!(site2 == "elk-dx" & yr == 2019)) %>% 
+  filter(!(site2 == "eb2-cc" & numeric.p50 >200)) %>% 
+  ggplot(aes(yr)) +
+  geom_line(aes(y=numeric.p50, color = plot), alpha = .5) +
+  geom_point(aes(y=numeric.p50, color = plot)) +
+  geom_pointrange(aes(y = numeric.p50, ymin = numeric.p25, ymax = numeric.p75, color = plot), alpha = 0.51) +
+  # facet_wrap(~site) +
+  facet_grid(site~season) +
+  theme_minimal() +
+  labs(y="Median willow height (cm)", x = "Year", caption = "Willow height at experimental sites")
+# ggsave("./output/median_willow_height_20191205_0924.png", width = 7, height = 5.5)
+
+pltly3 %>% plotly::ggplotly()
+
+```
+
+## Median heights - exp plots, site2, yr
+
+>interactive plot. hover over point for more info
+
+```{r, fig.height=8}
+## line plot
+ggpl1 <- summary.by.site2 %>%
+  mutate(yr = as.integer(yr)) %>% 
+  filter(skim_variable == 'pl_ht_cm') %>%
+  filter(!(site2 == "eb2-cc" & numeric.p50 >200)) %>% 
+  filter(plot != "obs") %>% 
+  ggplot(aes(yr)) +
+  # geom_line(aes(y=numeric.p50, color = season, lty = season)) +
+  geom_point(aes(y=numeric.p50, color = season, shape = season)) +
+  # geom_pointrange(aes(y = numeric.p50, ymin = numeric.p25, ymax = numeric.p75, color = plot), alpha = 0.31) +
+  facet_wrap(~site2, ncol = 4) +
+  # facet_grid(site~season) +
+  theme_minimal() +
+  labs(y="Median willow height (cm)", x = "Year", caption = "Willow height at experimental sites")
+# ggsave("./output/median_willow_height_20191205_0924.png", width = 7, height = 5.5)
+# ggpl1
+
+plotly::ggplotly(ggpl1)
+
+```
+
+> suspect point: wb-cx 2018 spring
+
+## Median heights - exp plots by site2
+
+>interactive plot. hover over point for more info
+
+```{r}
+##
+pltly2 <- summary.by.site2 %>%
+  select(yr, plot, site2, skim_variable, contains("numeric")) %>% 
+  filter(!(site2 == "elk-dx" & yr == 2019)) %>% 
+  filter(!(site2 == "eb2-cc" & numeric.p50 >200)) %>%  
+  filter(skim_variable == "pl_ht_cm") %>% 
+  filter(plot != "obs") %>%
+  mutate(yr = as.integer(yr)) %>% 
+  ggplot(aes(yr, site2)) +
+  geom_tile(aes(fill = numeric.mean), color = 'gray70') +
+  scale_fill_viridis() +
+  theme_light() +
+  labs(x = "Year", y = "", subtitle = "Mean willow height", fill = "Height (cm)", caption = getwd())
+
+pltly2 %>% plotly::ggplotly()
+
+# ggsave("./output/median_willow_height_HM_20191205_0924.png", width = 7, height = 7)
+
+```
+
