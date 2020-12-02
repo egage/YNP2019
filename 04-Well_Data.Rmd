@@ -2173,11 +2173,7 @@ w18.sel %>%
 ```
 
 
-# name comp
 ```{r}
-
-w18.sel %>% 
-  glimpse()
 
 ## FIX hailbuf and Hailbuf
 
