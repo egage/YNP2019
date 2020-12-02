@@ -1457,7 +1457,7 @@ sel.01.19.summary <- sel.01.19.summary %>%
 #   View()
 
 ```
-#>
+
 ```{r}
 sel.01.19.summary %>% 
   visdat::vis_dat() +
@@ -1467,6 +1467,8 @@ sel.01.19.summary %>%
 
 
 ## Export
+
+Create csv of combined manual water table measurements (existing warts and all).
 
 **Raw**
 ```{r, eval=FALSE}
