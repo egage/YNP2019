@@ -84,11 +84,6 @@ log.dat %>%
 log.dat <- log.dat %>% 
   mutate_if(.predicate = is.character,.funs = tolower)
 
-log.dat %>% 
-  head() %>% View()
-
-
-
 ```
 
 
@@ -203,7 +198,26 @@ dly.mean %>% # names()
 ### 2018 Data 
 #### Data import and initial inspection 
 
+
+Notes on data collected during the 2018 field season: Lewis Messner - 10/24/2018
+-	Data file labeled Slough Creek is WBCC. Pressure transducer was re-labeled for Slough Creek in 2017 but never deployed. Redeployed in spring to WBCC and not renamed. 
+-	Crystal well was removed in either May or June 2018 and replaced in July 2018. Check timing of removal in May/June. Logger was likely removed from the well, not paused, and returned in July after a reset. 
+-	All data need to be post-processed. All stick-up, total depth, and hanging distances are recorded in the well measurement field note books, which will eventually be copied to a spreadsheet.  
+
+
 ```{r}
+# read directory for all logger files 
+# data updated as of 20191203
+files2018csv <- fs::dir_ls("./data/raw/WinSituData/Logger_Data_2018", recurse = TRUE, glob = "*.csv")
+
+files2018csv
+
+t <- read_csv("./data/raw/WinSituData/Logger_Data_2018/Exported Data/Exported_20181024/EB2_dc_2012+_Append_2018-08-07_15-00-09-695.csv")
+
+
+
+read_csv(col_names = col_names, skip = 3)
+## 21 different files! -- some of which may have multi tabs
 
 ```
 
