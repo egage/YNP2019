@@ -16,9 +16,7 @@ output:
 
 library(knitr)
 opts_chunk$set(echo = TRUE, warning = TRUE, message = FALSE, fig.align = 'center')
-# opts_knit$set(root.dir=normalizePath('../')) # this is required if Rmd is nested below the project directory
-
-# opts_chunk$set(fig.path = "../output/figures/") # corrected path and added dev. Needed to specify a subdirectory for figs
+# opts_knit$set(root.dir=normalizePath('../')) # required if Rmd is nested below the project directory
 
 ```
 
@@ -251,12 +249,12 @@ lu_site_beav <- read_csv("./data/lu_site_site2_beav.csv")
 
 
 ### try to add spp info to the 18 and 19 
-wilid.spp.lu2 <- read_csv("./data/wilid_spp._lu_v2.csv") %>% 
+wilid.spp.lu2 <- read_csv("./data/wilid_spp_lu_v2.csv") %>% 
   select(c(species, wilid_full)) %>% 
   distinct()
 
 ## change ref system to start with lu
-lu.wilid.spp.v2 <- read_csv("./data/wilid_spp._lu_v2.csv") %>% 
+lu.wilid.spp.v2 <- read_csv("./data/wilid_spp_lu_v2.csv") %>% 
   select(c(species, wilid_full)) %>% 
   distinct()
 

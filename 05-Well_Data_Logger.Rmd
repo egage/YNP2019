@@ -1,4 +1,23 @@
-# Well Data -- Data Loggers
+---
+title: "Well Data - Data Loggers"
+output:
+  html_document: 
+    fig_caption: yes
+    fig_height: 8
+    number_sections: no
+    theme: journal
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, warning = TRUE, message = FALSE, fig.align = 'center')
+# opts_knit$set(root.dir=normalizePath('../')) # required if Rmd is nested below the project directory
+
+```
 
 **Updated: `r format(Sys.time(), '%Y %B %d')`**
 
@@ -8,7 +27,9 @@ This section provides basic QA/QC assessments for the well logger data.
 
 Analyses aim to characterize basic data structure and identify potential issues, clean data as needed, then produce an archive-worthy output data.
 
-Because they originate as separate source files, 2016-2018 data are brought in and examined separately. In addition, data are cleaned to produce archival files for further analyses.
+Because they originate as separate source files, 2016-2018 data are brought in and examined separately. 
+
+Data are cleaned to produce analyzable files for further analyses. 
 
 ```{r,echo=FALSE}
 # library(here)
@@ -33,67 +54,105 @@ library(anytime)
 suppressPackageStartupMessages(library(compare))
 suppressPackageStartupMessages(library(skimr)) ## some useful functions
 suppressPackageStartupMessages(library(dataMaid))
-
+library(gt)
 ```
 
 
-### 2012-2015 (DCC Collection)
+## 2012-2015 (DCC Collection)
 
-#### Data import and initial inspection 
+### Data import and initial inspection 
 ```{r}
 # import of tsv 
-log.dat.raw <- readr::read_tsv("data/NSF_DataArchive20180208/Well_Logger_Data_2012-2015/Yell_Well_Data_Logger2012_2015.txt")
+dcc.raw <- readr::read_tsv("data/NSF_DataArchive20180208/Well_Logger_Data_2012-2015/Yell_Well_Data_Logger2012_2015.txt")
 
-log.dat <- log.dat.raw %>% 
+dcc <- dcc.raw %>% 
   clean_names() %>% 
   tibble::rownames_to_column(var = "RecordID") 
 
 ```
 
-```{r}
-## evaluate
-
-log.dat %>% glimpse()
-
+```{r, eval=FALSE}
+## inspection
+dcc %>% 
+  glimpse()
 
 ```
 
+There are various issues apparent on inspection.  For example:
 
-> **Questions/Issues:**    
-> 1. There was some bad exporting in the DCC file. No useable time stamps -- everything is characterer in date format.     
-> 2. May wish to find the orginal logger data. This may work for daily aggregated data. Otherwise, not sure what to do with the 6 per-day records.  
+> There are corrupt data in the DCC file. No useable time stamps -- everything is characterer in date format.     
+> "date_and_time" is not formatted as dttm, just a simple date. It's redundant with 'date'
+> The 'time' column is not, in fact, time data.
+May wish to find the orginal logger data. This may work for daily aggregated data. Otherwise, not sure what to do with the 6 per-day records. 
+> The 'second's column ranges from `r min(dcc$seconds)` to `r max(dcc$seconds)`. I guess this is a cumulative time elapsed, but from when to when? I'm still of the mind that daily aggregates are the way to go forward...
+
+dcc %>% View()
+
+
+
+
+
+and 'seconds' columns. 
+
 
 ```{r}
 ## data type changes
-log.dat <- log.dat %>% 
+dcc <- dcc %>% 
   mutate(date = mdy(date))
 
+## change case to ease merging with non-DCC data
+dcc <- dcc %>% 
+  mutate(site = tolower(site)) %>% 
+  mutate(wat_id2 = tolower(wat_id2)) %>% 
+  mutate(year = as.integer(year))
 
-## what are the distinct wells?
-log.dat %>% 
-  distinct(site_logger)
 
-# note there are 19 distinct "site_logger" values and 19 distinct "serial_num"
-log.dat %>% 
-  distinct(serial_num)
-
+dcc %>%
+  # distinct(date_and_time) %>% 
+  head()
 ```
 
 ```{r}
+visdat::vis_dat(dcc, warn_large_data = FALSE)
 
-log.dat <- log.dat %>% 
+dcc %>% 
+  distinct(time)
+```
+
+
+
+
+```{r}
+## what are the distinct wells?
+# dcc %>% 
+#   distinct(site_logger) %>% 
+#   gt() %>% 
+#   tab_header(title = "DCC logger data", subtitle = "Distinct 'site_logger'")
+
+# note there are 19 distinct "site_logger" values and 19 distinct "serial_num"
+dcc %>% 
+  distinct(site, serial_num) %>% 
+  gt() %>% 
+  tab_header(title = "DCC logger data", subtitle = "Distinct 'site_logger'")
+
+```
+
+
+```{r}
+
+dcc <- dcc %>% 
   mutate_if(.predicate = is.character,.funs = tolower)
 
 ```
 
 
 ```{r}
-dly.mean <- log.dat %>% 
+dcc.dly.mean <- dcc %>% 
   group_by(site,site_logger, wat_id2, date) %>% 
   summarise(mean.dly.abslevel = mean(abslevel,na.rm = TRUE), mean.water_column_m = mean(water_column_m, na.rm = TRUE))
 
 
-dly.mean <- dly.mean %>% 
+dcc.dly.mean <- dcc.dly.mean %>% 
   mutate(plot = case_when(str_detect(site, "cc") ~ "cc",
                           str_detect(site, "dc") ~ "dc",
                           str_detect(site, "dx") ~ "dx",
@@ -101,7 +160,7 @@ dly.mean <- dly.mean %>%
                           TRUE ~ "obs"))
 
 ## add in year and mob=nth columns
-dly.mean <- dly.mean %>% 
+dcc.dly.mean <- dcc.dly.mean %>% 
   mutate(yr = lubridate::year(date)) %>% 
   mutate(month = lubridate::month(date)) %>% 
   mutate(doy = lubridate::yday(date)) %>% 
@@ -110,38 +169,38 @@ dly.mean <- dly.mean %>%
 ```
 
 ```{r}
-
-dly.mean %>% 
+## some plots for QA
+dcc.dly.mean %>% 
   mutate(mean.water_column_m = mean.water_column_m*-1) %>% 
   filter(plot != "obs") %>% 
   ggplot(aes(x=date,y=mean.water_column_m)) +
   # geom_line(aes(color=site_logger)) +
   geom_line(color="blue") +
   geom_hline(yintercept = 0, color = "red", lty = "dashed") +
-  # labs(title = "Mean daily 'water_column_m' values") +
-  facet_wrap(~site) +
+  labs(title = "DCC: Mean daily 'water_column_m' values") +
+  facet_wrap(~site, ncol=2) +
   theme_minimal() +
-  labs(x = "Date", y = "Water table elevation (m)")
-# ggsave("waterlevel_loggers_exp-alt.png", width = 8.5, height = 6)
+  labs(x = "DOY", y = "mean.dly.abslevel", caption = "mean.dly.abslevel = mean(abslevel,na.rm = TRUE)")
 
-dly.mean %>% 
+```
+
+```{r}
+dcc.dly.mean %>% 
   filter(plot != "obs") %>% 
   ggplot(aes(x=date,y=mean.dly.abslevel)) +
   geom_line(color="blue") +
-  # labs(title = "Mean daily 'abslevel' values") +
+  labs(title = "DCC: Mean daily 'abslevel' values") +
   facet_wrap(~site, scales = "free_y") +
   theme_minimal() +
-  labs(x = "Date", y = "Water table elevation (m)")
+  labs(x = "Date", y = "Water table elevation (m)",caption = "mean.dly.abslevel = mean(abslevel,na.rm = TRUE)")
+
 # ggsave("waterlevel_loggers_exp.png", width = 8.5, height = 6)
-
-
 ```
 
 
 ```{r, fig.height=15}
 ## plot daily traces
-
-dly.mean %>% # names()
+dcc.dly.mean %>% # names()
   filter(plot != "obs") %>%
   filter(month > 2 & month < 10) %>% 
   mutate(yr = as.factor(yr)) %>% 
@@ -159,7 +218,7 @@ dly.mean %>% # names()
 ```{r, fig.height=15}
 ## plot daily traces
 
-dly.mean %>% # names()
+dcc.dly.mean %>% # names()
   filter(plot != "obs") %>%
   filter(yr != "2012") %>% 
   filter(month > 2 & month < 10) %>% 
@@ -175,53 +234,298 @@ dly.mean %>% # names()
 
 ```
 
+# 2016-2019 files
 
+General strategy is to work backwards from 2019 as there innumerable 'appended' files. Maybe these capture data from earlier periods?
 
-### 2016 Data 
-#### Data import and initial inspection 
+## File inventory:  *.wsl
+```{r}
+## find WSL files
+files_all_wsl <- fs::dir_ls("./data/raw/WinSituData", recurse = TRUE, glob = "*.wsl") %>% 
+  enframe() %>% 
+  rename(path_full = value) %>% 
+  select(-name) %>% 
+  mutate(path = fs::path_dir(path_full)) %>% 
+  mutate(file_name = fs::path_file(path_full))
+
+```
+
+There _many_ files. Some don't even seem to be from YELL (e.g. files from Sara Bisbing's AK work).
+```{r}
+files_all_wsl %>% 
+  select(-path_full) %>% 
+  datatable(caption = "All *.wsl files")
+#  A total shit show, as expected.
+```
+
+## 2019 Data 
+
+### Data import and initial inspection 
+
+```{r, eval=FALSE}
+## find WSL files
+files2019wsl <- fs::dir_ls("./data/raw/WinSituData/Logger_Data_2019", recurse = TRUE, glob = "*.wsl") %>% 
+  enframe() %>% 
+  rename(path_full = value) %>% 
+  select(-name) %>% 
+  mutate(path = fs::path_dir(path_full)) %>% 
+  mutate(file_name = fs::path_file(path_full))
+```
 
 ```{r}
+# read directory for all exported logger files 
+# there's a crazy number of inconsistently entered fields. Nothing is clear.
+files2019csv <- fs::dir_ls("./data/raw/WinSituData/Logger_Data_2019", recurse = TRUE, glob = "*.csv")
+
+## make a tibble, rename
+files2019csv <- files2019csv %>% 
+  enframe() %>% 
+  rename(path_full = value) %>% 
+  select(-name)
+
+## add naked file name and naked path
+files2019csv <- files2019csv %>% 
+  mutate(path = fs::path_dir(path_full)) %>% 
+  mutate(file_name = fs::path_file(path_full)) 
+
+```
+
+For for 2019, there are `r files2019csv %>% 
+  distinct(file_name) %>% nrow()` distinct csv files in the logger directory. 
+Examination of these files reveals that they're inconsistently structured. These appear to mainly be 
+raw export files from WinSitu. Pending on the partiular notes entered in the logger, data starts at a different row in the *.csv, complicating parsing. 
+
+```{r}
+## table of distinct file names
+files2019csv %>% 
+  distinct(file_name) %>%
+  gt::gt() %>% 
+  gt::tab_header(title = "Distinct csv files in the 2019 directory")
+
+```
+
+In this list is the Tower baro data. Pull this out. I believe it should be used for correcting all the different site data? There seem to be no other baro files....
+
+### Pull out what appears to be the only baro file
+
+Source file: TowerBarow_2011+_2019-09-10_11-01-36-258.csv
+```{r}
+tow.baro <- read_csv("data/raw/WinSituData/Logger_Data_2019/TowerBarow_2011+_2019-09-10_11-01-36-258.csv", skip=84) %>% 
+  clean_names() %>% 
+  select(-x5) %>%
+  mutate(date = anytime::anydate(date_and_time))
+
+## the start of the trace looks a little dodgy, trim
+tow.baro <- tow.baro %>% 
+  filter(date > 2011-10-02)
+
+## extract date and calc mean daily pressure (entered in mm Hg) and temp
+tow.baro.dly <- tow.baro %>% 
+  group_by(date) %>% 
+  dplyr::summarize(mmHg.mean = mean(pressure_mm_hg, na.rm = TRUE), temp_c.mean = mean(temperature_c)) %>% 
+  mutate(yr = year(date))
+
+```
+
+```{r}
+tow.baro.dly %>% 
+  filter(mmHg.mean < 620) %>% 
+  ggplot(aes(date, mmHg.mean)) +
+  geom_line(color = 'blue') +
+  theme_minimal() +
+  labs(title = "Tower Baro daily trace", subtitle = "mean daily mm Hg", caption  = "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
+
+tow.baro.dly %>% 
+  ggplot(aes(date, temp_c.mean)) +
+  geom_line(color = 'red') +
+  theme_minimal() +
+  labs(title = "Tower Baro daily trace", subtitle = "mean daily temp_c", caption  = "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
+
+
+```
+
+Temps below -30 C seem highly questionable...
+
+
+```{r}
+## exclude the baro from the remaining logger files
+files2019csv <- files2019csv %>% 
+  filter(file_name != "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
+
+```
+
+```{r}
+## all of the csv exports lack depth; uncorrected.
+files2019csv <- files2019csv %>% 
+  mutate(import = map(.x = path_full, .f = read_csv, skip=120, col_names = c("date_time","seconds","psi","temp_c"))) %>% 
+  mutate(header = map(path_full, read_csv, skip = 0,
+  n_max = 10))
+
+## Munge: extract out info from file header
+files2019csv <- files2019csv %>% 
+  mutate(hdr_info = map(path_full, read_csv, skip =13,
+  n_max = 13, col_names = c("hdr_var","hdr_val"))) %>% 
+  unnest(hdr_info) %>% 
+  filter(!is.na(hdr_val) & !is.na(hdr_var)) %>%
+  # distinct(hdr_var)
+  filter(hdr_var == "Site" | hdr_var == "Serial Number") %>% 
+  pivot_wider(names_from = hdr_var, values_from = hdr_val) %>% 
+  clean_names() %>% 
+  mutate(site_hdr = site)
+
+```
+
+Note: 'site_hdr' refers to the 'site' attribute recorded in the export file (i.e., it was entered in the logger).
+
+```{r, eval=FALSE}
+files2019csv %>%
+  pluck(5,3) %>% 
+  # head() %>% 
+  View()
+
+# files2018csv %>% 
+#   pluck(4,2) %>% 
+#   datatable()
+
+## get names
+# files2019csv %>% 
+#   mutate(names = map(import, names)) %>% 
+#   unnest(names) %>% 
+#   datatable()
+
+```
+
+```{r}
+files2019csv %>% 
+  head() %>% 
+  gt()
 
 ```
 
 
+## 2018 Data 
 
-
-### 2017 Data 
-#### Data import and initial inspection 
-
-```{r}
-
-```
-
-
-### 2018 Data 
-#### Data import and initial inspection 
+### Data import and initial inspection 
 
 
 Notes on data collected during the 2018 field season: Lewis Messner - 10/24/2018
--	Data file labeled Slough Creek is WBCC. Pressure transducer was re-labeled for Slough Creek in 2017 but never deployed. Redeployed in spring to WBCC and not renamed. 
+-	**Data file labeled Slough Creek is WBCC.** Pressure transducer was re-labeled for Slough Creek in 2017 but never deployed. Redeployed in spring to WBCC and not renamed. 
 -	Crystal well was removed in either May or June 2018 and replaced in July 2018. Check timing of removal in May/June. Logger was likely removed from the well, not paused, and returned in July after a reset. 
 -	All data need to be post-processed. All stick-up, total depth, and hanging distances are recorded in the well measurement field note books, which will eventually be copied to a spreadsheet.  
 
 
 ```{r}
-# read directory for all logger files 
-# data updated as of 20191203
+# read directory for all exported logger files 
+# there's a crazy number of inconsistently entered fields. Nothing is clear.
 files2018csv <- fs::dir_ls("./data/raw/WinSituData/Logger_Data_2018", recurse = TRUE, glob = "*.csv")
 
-files2018csv
+## find WSL files
+files2018wsl <- fs::dir_ls("./data/raw/WinSituData/Logger_Data_2018", recurse = TRUE, glob = "*.wsl") %>% 
+  enframe() %>% 
+  rename(path_full = value) %>% 
+  select(-name) %>% 
+  mutate(path = fs::path_dir(path_full)) %>% 
+  mutate(file_name = fs::path_file(path_full))
+
+## make a tibble, rename
+files2018csv <- files2018csv %>% 
+  enframe() %>% 
+  rename(path_full = value) %>% 
+  select(-name)
+
+## add naked file name and naked path
+files2018csv <- files2018csv %>% 
+  mutate(path = fs::path_dir(path_full)) %>% 
+  mutate(file_name = fs::path_file(path_full)) 
+
+```
+
+For for 2018 alone, there are `r files2018csv %>% 
+  distinct(file_name) %>% nrow()` distinct csv files in the logger directory. 
+Examination of these files reveals that they're inconstienly structured. 
+
+```{r}
+## table of distinct file names
+files2018csv %>% 
+  distinct(file_name) %>%
+  gt::gt() %>% 
+  gt::tab_header(title = "Distinct csv files in the 2018 directory")
+
+```
+#>
+```{r}
+files2018csv %>% 
+  filter(str_detect(path_full,"Tow"))
+
+## all of the csv exports lack depth; uncorrected.
+files2018csv <- files2018csv %>% 
+  mutate(import = map(.x = path_full, .f = read_csv, skip=120, col_names = c("date_time","seconds","psi","temp_c"))) %>% 
+  mutate(header = map(path_full, read_csv, skip = 0,
+  n_max = 40))
+
+## Munge: extract out info from file header
+f2018 <- files2018csv %>% 
+  mutate(hdr_info = map(path_full, read_csv, skip =13,
+  n_max = 13, col_names = c("hdr_var","hdr_val"))) %>% 
+  unnest(hdr_info) %>% 
+  filter(!is.na(hdr_val) & !is.na(hdr_var)) %>%
+  # distinct(hdr_var)
+  filter(hdr_var == "Site" | hdr_var == "Serial Number") %>% 
+  pivot_wider(names_from = hdr_var, values_from = hdr_val) %>% 
+  clean_names()
+
+```
+
+
+```{r, eval=FALSE}
+files2018csv %>%
+  pluck(5,2) %>% 
+  head() %>% View()
+
+files2018csv %>% 
+  pluck(4,2) %>% datatable()
+
+View(files2018csv)
+
+## get names
+files2018csv %>% 
+  mutate(names = map(import, names)) %>% 
+  unnest(names) %>% 
+  datatable()
+
+```
+
+```{r, eval=FALSE}
+
+t <- read_csv("./data/raw/WinSituData/Logger_Data_2018/Exported Data/Exported_20181024/EB2_dc_2012+_Append_2018-08-07_15-00-09-695.csv", skip = 69)
 
 t <- read_csv("./data/raw/WinSituData/Logger_Data_2018/Exported Data/Exported_20181024/EB2_dc_2012+_Append_2018-08-07_15-00-09-695.csv")
 
-
+View(t)
 
 read_csv(col_names = col_names, skip = 3)
 ## 21 different files! -- some of which may have multi tabs
 
 ```
 
+## 2017 Data 
+### Data import and initial inspection 
 
-### Clean and Combine Years
+```{r}
 
-### Export Archivable Version of Cleaned Data for Further Analysis
+```
+
+
+## 2016 Data 
+
+### Data import and initial inspection 
+
+```{r}
+
+```
+
+
+
+## Clean and Combine Years
+
+## Export Archivable Version of Cleaned Data for Further Analysis
