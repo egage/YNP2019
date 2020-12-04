@@ -258,7 +258,59 @@ files_all_wsl %>%
 #  A total shit show, as expected.
 ```
 
-## 2019 Data 
+## Pull out Tower baro data
+
+In this list is the Tower baro data. Pull this out. I believe it should be used for correcting all the different site data? There seem to be no other baro files....
+
+Source file: TowerBarow_2011+_2019-09-10_11-01-36-258.csv
+Based on the date range, this may extend to the full time series?
+```{r}
+tow.baro <- read_csv("data/raw/WinSituData/Logger_Data_2019/TowerBarow_2011+_2019-09-10_11-01-36-258.csv", skip=84) %>% 
+  clean_names() %>% 
+  select(-x5) %>%
+  mutate(date = anytime::anydate(date_and_time))
+
+## the start of the trace looks a little dodgy, trim
+tow.baro <- tow.baro %>% 
+  filter(date > 2011-10-02)
+
+## extract date and calc mean daily pressure (entered in mm Hg) and temp
+tow.baro.dly <- tow.baro %>% 
+  group_by(date) %>% 
+  dplyr::summarize(mmHg_mean = mean(pressure_mm_hg, na.rm = TRUE), temp_c_mean = mean(temperature_c)) %>% 
+  mutate(yr = year(date))
+
+# convert the mm Hg to psi (units the loggers are in)
+tow.baro.dly <- tow.baro.dly %>% 
+  select(-yr) %>%
+  mutate(baroTow_psi = 0.0193368*mmHg_mean) %>% 
+  rename(baroTow_tempC = temp_c_mean) %>% 
+  rename(baroTow_mmHg = mmHg_mean)
+
+```
+
+```{r}
+## plot baro data
+tow.baro.dly %>% 
+  filter(mmHg.mean < 620) %>% 
+  ggplot(aes(date, mmHg.mean)) +
+  geom_line(color = 'blue') +
+  theme_minimal() +
+  labs(title = "Tower Baro daily trace", subtitle = "mean daily mm Hg", caption  = "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
+
+tow.baro.dly %>% 
+  ggplot(aes(date, temp_c.mean)) +
+  geom_line(color = 'red') +
+  theme_minimal() +
+  labs(title = "Tower Baro daily trace", subtitle = "mean daily temp_c", caption  = "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
+
+
+```
+
+Temps below -30 C seem highly questionable...
+
+
+## 2019 Data
 
 ### Data import and initial inspection 
 
@@ -293,7 +345,7 @@ files2019csv <- files2019csv %>%
 For for 2019, there are `r files2019csv %>% 
   distinct(file_name) %>% nrow()` distinct csv files in the logger directory. 
 Examination of these files reveals that they're inconsistently structured. These appear to mainly be 
-raw export files from WinSitu. Pending on the partiular notes entered in the logger, data starts at a different row in the *.csv, complicating parsing. 
+raw export files from WinSitu. Pending on the particular notes entered in the logger, data starts at a different row in the *.csv, complicating parsing. Data are uncorrected. The only baro data seems to be from Tower and is used to process the data.
 
 ```{r}
 ## table of distinct file names
@@ -302,50 +354,9 @@ files2019csv %>%
   gt::gt() %>% 
   gt::tab_header(title = "Distinct csv files in the 2019 directory")
 
+
+# Pull out what appears to be the only baro file
 ```
-
-In this list is the Tower baro data. Pull this out. I believe it should be used for correcting all the different site data? There seem to be no other baro files....
-
-### Pull out what appears to be the only baro file
-
-Source file: TowerBarow_2011+_2019-09-10_11-01-36-258.csv
-```{r}
-tow.baro <- read_csv("data/raw/WinSituData/Logger_Data_2019/TowerBarow_2011+_2019-09-10_11-01-36-258.csv", skip=84) %>% 
-  clean_names() %>% 
-  select(-x5) %>%
-  mutate(date = anytime::anydate(date_and_time))
-
-## the start of the trace looks a little dodgy, trim
-tow.baro <- tow.baro %>% 
-  filter(date > 2011-10-02)
-
-## extract date and calc mean daily pressure (entered in mm Hg) and temp
-tow.baro.dly <- tow.baro %>% 
-  group_by(date) %>% 
-  dplyr::summarize(mmHg.mean = mean(pressure_mm_hg, na.rm = TRUE), temp_c.mean = mean(temperature_c)) %>% 
-  mutate(yr = year(date))
-
-```
-
-```{r}
-tow.baro.dly %>% 
-  filter(mmHg.mean < 620) %>% 
-  ggplot(aes(date, mmHg.mean)) +
-  geom_line(color = 'blue') +
-  theme_minimal() +
-  labs(title = "Tower Baro daily trace", subtitle = "mean daily mm Hg", caption  = "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
-
-tow.baro.dly %>% 
-  ggplot(aes(date, temp_c.mean)) +
-  geom_line(color = 'red') +
-  theme_minimal() +
-  labs(title = "Tower Baro daily trace", subtitle = "mean daily temp_c", caption  = "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
-
-
-```
-
-Temps below -30 C seem highly questionable...
-
 
 ```{r}
 ## exclude the baro from the remaining logger files
@@ -356,8 +367,10 @@ files2019csv <- files2019csv %>%
 
 ```{r}
 ## all of the csv exports lack depth; uncorrected.
+
+## add some header info
 files2019csv <- files2019csv %>% 
-  mutate(import = map(.x = path_full, .f = read_csv, skip=120, col_names = c("date_time","seconds","psi","temp_c"))) %>% 
+  mutate(import = map(.x = path_full, .f = read_csv, skip=100, col_names = c("date_time","seconds","psi","temp_c"))) %>% 
   mutate(header = map(path_full, read_csv, skip = 0,
   n_max = 10))
 
@@ -383,22 +396,60 @@ files2019csv %>%
   # head() %>% 
   View()
 
-# files2018csv %>% 
-#   pluck(4,2) %>% 
-#   datatable()
+```
 
-## get names
-# files2019csv %>% 
-#   mutate(names = map(import, names)) %>% 
-#   unnest(names) %>% 
-#   datatable()
+> Attribute with the serial number and site from the header. Note: the site is as exists in the logger. Does not match format used elswhere, so more munging...
+
+```{r}
+## extract out the actual data
+logger_raw2019 <- files2019csv %>%
+  unnest(import)
+
+```
+
+```{r, cache=TRUE}
+# select and attribute with the serial number and site from the header
+logger_raw2019 <- logger_raw2019 %>%
+  select(file_name,date_time, psi, temp_c, serial_number, site_hdr) %>% 
+  distinct() %>% 
+  mutate(date_time = anytime::anytime(date_time)) %>% 
+  mutate(date = date(date_time)) %>% 
+  mutate(yr = year(date_time))
+```
+
+> Distill to daily time step
+
+```{r}
+## create daily
+logger_raw2019.dly <- logger_raw2019 %>% 
+  group_by(file_name,date, serial_number, site_hdr) %>% 
+  dplyr::summarise(psi.dly.mean = mean(psi, na.rm=TRUE), tempC.dly.mean = mean(temp_c, na.rm=TRUE)) %>%
+  distinct()
+
+```
+
+```{r, eval=FALSE}
+## qa
+logger_raw2019.dly %>% 
+  ggplot(aes(date,psi.dly.mean)) +
+  geom_line(aes(color = serial_number)) +
+  facet_wrap(~site_hdr)
+  
+```
+
+```{r}
+## join in the baro
+
+logger_raw2019.dly.baro <- left_join(logger_raw2019.dly, tow.baro.dly, by = "date") 
 
 ```
 
 ```{r}
-files2019csv %>% 
-  head() %>% 
-  gt()
+logger_raw2019.dly.baro %>% 
+  visdat::vis_dat()
+
+logger_raw2019.dly.baro %>% 
+  View()
 
 ```
 
@@ -438,6 +489,8 @@ files2018csv <- files2018csv %>%
   mutate(path = fs::path_dir(path_full)) %>% 
   mutate(file_name = fs::path_file(path_full)) 
 
+# files2018csv %>% 
+#   distinct(file_name) %>% datatable()
 ```
 
 For for 2018 alone, there are `r files2018csv %>% 
@@ -452,19 +505,16 @@ files2018csv %>%
   gt::tab_header(title = "Distinct csv files in the 2018 directory")
 
 ```
-#>
-```{r}
-files2018csv %>% 
-  filter(str_detect(path_full,"Tow"))
 
+```{r}
 ## all of the csv exports lack depth; uncorrected.
 files2018csv <- files2018csv %>% 
-  mutate(import = map(.x = path_full, .f = read_csv, skip=120, col_names = c("date_time","seconds","psi","temp_c"))) %>% 
+  mutate(import = map(.x = path_full, .f = read_csv, skip=100, col_names = c("date_time","seconds","psi","temp_c"))) %>% 
   mutate(header = map(path_full, read_csv, skip = 0,
   n_max = 40))
 
 ## Munge: extract out info from file header
-f2018 <- files2018csv %>% 
+files2018csv <- files2018csv %>% 
   mutate(hdr_info = map(path_full, read_csv, skip =13,
   n_max = 13, col_names = c("hdr_var","hdr_val"))) %>% 
   unnest(hdr_info) %>% 
@@ -472,10 +522,14 @@ f2018 <- files2018csv %>%
   # distinct(hdr_var)
   filter(hdr_var == "Site" | hdr_var == "Serial Number") %>% 
   pivot_wider(names_from = hdr_var, values_from = hdr_val) %>% 
-  clean_names()
+  clean_names() %>% 
+  rename(site_hdr = site) 
+
+## remove baro
+files2018csv <- files2018csv %>%
+  filter(file_name != "2011+_2018-08-22_08-59-44-597.csv") # remove the tower baro data. I've previously pulled that out (and it's in mm Hg)
 
 ```
-
 
 ```{r, eval=FALSE}
 files2018csv %>%
@@ -484,8 +538,6 @@ files2018csv %>%
 
 files2018csv %>% 
   pluck(4,2) %>% datatable()
-
-View(files2018csv)
 
 ## get names
 files2018csv %>% 
@@ -496,24 +548,171 @@ files2018csv %>%
 ```
 
 ```{r, eval=FALSE}
-
+## explore parsing
 t <- read_csv("./data/raw/WinSituData/Logger_Data_2018/Exported Data/Exported_20181024/EB2_dc_2012+_Append_2018-08-07_15-00-09-695.csv", skip = 69)
-
+t
 t <- read_csv("./data/raw/WinSituData/Logger_Data_2018/Exported Data/Exported_20181024/EB2_dc_2012+_Append_2018-08-07_15-00-09-695.csv")
+t
+```
 
-View(t)
+```{r}
+## extract out the actual data
+logger_raw2018 <- files2018csv %>%
+  unnest(import)
 
-read_csv(col_names = col_names, skip = 3)
-## 21 different files! -- some of which may have multi tabs
+# logger_raw2018 %>% 
+#   distinct(file_name)
 
 ```
+
+```{r, cache=TRUE}
+# select and attribute with the serial number and site from the header. Take a long time to process...
+logger_raw2018 <- logger_raw2018 %>%
+  select(file_name,date_time, psi, temp_c, serial_number, site_hdr) %>% 
+  distinct() %>% 
+  mutate(date_time = anytime::anytime(date_time)) %>% 
+  mutate(date = date(date_time)) %>% 
+  mutate(yr = year(date_time))
+```
+
+
+> Distill to daily time step
+
+```{r}
+## create daily
+logger_raw2018.dly <- logger_raw2018 %>% 
+  group_by(file_name,date, serial_number, site_hdr) %>% 
+  dplyr::summarise(psi.dly.mean = mean(psi, na.rm=TRUE), tempC.dly.mean = mean(temp_c, na.rm=TRUE)) %>%
+  ungroup() %>% 
+  distinct()
+
+```
+
+```{r, eval=FALSE}
+## qa
+logger_raw2018.dly %>% 
+  ggplot(aes(date,psi.dly.mean)) +
+  geom_line(aes(color = serial_number)) +
+  facet_wrap(~site_hdr)
+  
+```
+
+
+```{r}
+## join in the baro
+
+logger_raw2018.dly.baro <- left_join(logger_raw2018.dly, tow.baro.dly, by = "date") 
+
+```
+
+```{r, eval=FALSE}
+logger_raw2018.dly.baro %>% 
+  visdat::vis_dat()
+
+logger_raw2018.dly.baro %>% 
+  View()
+
+```
+
+```{r}
+# combine and distill down the 2018 and 2019 batches
+logger_raw2018_19.dly.baro <- bind_rows(logger_raw2018.dly.baro, logger_raw2019.dly.baro) %>% 
+  distinct()
+
+## add yr
+logger_raw2018_19.dly.baro <- logger_raw2018_19.dly.baro %>% 
+  mutate(yr = as.integer(year(date)))
+```
+
+```{r}
+## qa
+# logger_raw2018_19.dly.baro %>% 
+#   head()
+
+logger_raw2018_19.dly.baro %>% 
+  tabyl(site_hdr, yr) %>% 
+  datatable(caption = "Count of records by yr and site_hdr")
+
+logger_raw2018_19.dly.baro %>% 
+  tabyl(serial_number, yr) %>% 
+  datatable(caption = "Count of records by yr and serial number")
+
+```
+
+```{r}
+## munge site
+logger_raw2018_19.dly.baro %>% 
+  distinct(site_hdr)
+
+## do my best to guess site and plot from the site_hdr field derived from logger header
+logger_raw2018_19.dly.baro <- logger_raw2018_19.dly.baro %>% 
+  mutate(site2 = case_when(site_hdr == "WestBlacktail_exp dx" ~ "wb-dx",
+                           site_hdr == "Crystal_Well" ~ "crystal-obs",
+                           site_hdr == "Crystal3" ~ "crystal-obs",
+                           site_hdr == "EastBlacktail1_exp cc" ~ "eb1-cc",
+                           site_hdr == "EastBlacktail1_exp dx" ~ "eb1-dx",
+                           site_hdr == "EastBlacktail2_obs" ~ "eb2-obs",
+                           site_hdr == "EastBlacktail2_exp cc" ~ "eb2-cc",
+                           site_hdr == "EastBlacktail2_exp dc" ~ "eb2-dc",
+                           site_hdr == "EastBlacktail2_exp dx" ~ "eb2-dx",
+                           site_hdr == "Elk1_obs" ~ "elk1-obs",
+                           site_hdr == "Elk4_obs" ~ "elk4-obs",
+                           site_hdr == "Elk5" ~ "elk5-obs",
+                           site_hdr == "Elk_exp cc" ~ "elk-cc",
+                           site_hdr == "Elk_exp dx" ~ "elk-dx",
+                           site_hdr == "LowerBlacktail2_obs" ~ "lb2-obs",
+                           site_hdr == "LB4_WELL" ~ "lb4-obs",
+                           site_hdr == "Oxbow_obs" ~ "oxbow-obs",
+                           site_hdr == "Slough" ~ "wb-cc",
+                           site_hdr == "WB4" ~ "wb4-obs",
+                           site_hdr == "LostCreek_obs" ~ "lostc-obs",
+                           TRUE ~ site_hdr)) %>% 
+  separate(site2, c("site","plot"),sep = "-", remove = FALSE)
+
+# Notes on data collected during the 2018 field season: Lewis Messner - 10/24/2018
+# -	**Data file labeled Slough Creek is WBCC.
+```
+
+```{r}
+logger_raw2018_19.dly.baro %>% 
+  select(serial_number,site_hdr,site2,site,plot) %>% 
+  distinct() %>% 
+  gt() %>% 
+  tab_header(title = "site info attributed from logger site (site_hdr)", subtitle = "LEWIS please check")
+
+## write to csv to share with LEWIS
+# logger_raw2018_19.dly.baro %>% 
+#   select(serial_number,site_hdr,site2,site,plot) %>% 
+#   distinct() %>%
+#   write_csv("./data/processed/logger_site_attribution_4QC.csv")
+
+```
+
+```{r}
+## first attempt at baro correction
+logger_raw2018_19.dly.baro <- logger_raw2018_19.dly.baro %>% 
+  mutate(psi.dif = psi.dly.mean-baroTow_psi) %>%
+  mutate(head_cm = psi.dif*0.70324961490205*100) 
+
+```
+
+```{r}
+logger_raw2018_19.dly.baro %>% 
+  summarytools::descr(head_cm) %>% 
+  summarytools::tb()
+
+logger_raw2018_19.dly.baro %>% 
+  ggplot(aes(date,head_cm)) +
+  geom_line(aes(color = plot)) +
+  facet_wrap(~site) +
+  labs(title = "QA plot", subtitle = "logger_psi - baro_psi converted to cm of head")
+
+```
+
+I don't know where missing site data should be. Also, info on the specific well id and location is lacking, so not able to compare to manual well measurements. No notes on stick up or hang depth needed to further process the data. 
 
 ## 2017 Data 
 ### Data import and initial inspection 
-
-```{r}
-
-```
 
 
 ## 2016 Data 
@@ -527,5 +726,33 @@ read_csv(col_names = col_names, skip = 3)
 
 
 ## Clean and Combine Years
+
+## QA plots
+```{r, eval=FALSE}
+# see https://aosmith.rbind.io/2018/08/20/automating-exploratory-plots/
+scatter_fun = function(x, y) {
+     ggplot(dat, aes(x = .data[[x]], y = .data[[y]]) ) +
+          geom_point() +
+          geom_smooth(method = "loess", se = FALSE, color = "grey74") +
+          theme_bw() +
+          labs(x = x,
+               y = y)
+}
+
+## line function
+line_fun = function(x, y) {
+     ggplot(dat, aes(x = .data[[x]], y = .data[[y]]) ) +
+          geom_line() +
+          theme_minimal() +
+          labs(x = x,
+               y = y)
+}
+
+
+elev_plots = map(expl, ~scatter_fun(.x, "elev") )
+
+```
+
+
 
 ## Export Archivable Version of Cleaned Data for Further Analysis
