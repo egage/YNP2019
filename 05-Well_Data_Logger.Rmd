@@ -86,15 +86,6 @@ There are various issues apparent on inspection.  For example:
 May wish to find the orginal logger data. This may work for daily aggregated data. Otherwise, not sure what to do with the 6 per-day records. 
 > The 'second's column ranges from `r min(dcc$seconds)` to `r max(dcc$seconds)`. I guess this is a cumulative time elapsed, but from when to when? I'm still of the mind that daily aggregates are the way to go forward...
 
-dcc %>% View()
-
-
-
-
-
-and 'seconds' columns. 
-
-
 ```{r}
 ## data type changes
 dcc <- dcc %>% 
@@ -106,21 +97,14 @@ dcc <- dcc %>%
   mutate(wat_id2 = tolower(wat_id2)) %>% 
   mutate(year = as.integer(year))
 
-
-dcc %>%
-  # distinct(date_and_time) %>% 
-  head()
 ```
 
-```{r}
+```{r, eval=FALSE}
 visdat::vis_dat(dcc, warn_large_data = FALSE)
 
 dcc %>% 
   distinct(time)
 ```
-
-
-
 
 ```{r}
 ## what are the distinct wells?
@@ -151,7 +135,6 @@ dcc.dly.mean <- dcc %>%
   group_by(site,site_logger, wat_id2, date) %>% 
   summarise(mean.dly.abslevel = mean(abslevel,na.rm = TRUE), mean.water_column_m = mean(water_column_m, na.rm = TRUE))
 
-
 dcc.dly.mean <- dcc.dly.mean %>% 
   mutate(plot = case_when(str_detect(site, "cc") ~ "cc",
                           str_detect(site, "dc") ~ "dc",
@@ -174,7 +157,6 @@ dcc.dly.mean %>%
   mutate(mean.water_column_m = mean.water_column_m*-1) %>% 
   filter(plot != "obs") %>% 
   ggplot(aes(x=date,y=mean.water_column_m)) +
-  # geom_line(aes(color=site_logger)) +
   geom_line(color="blue") +
   geom_hline(yintercept = 0, color = "red", lty = "dashed") +
   labs(title = "DCC: Mean daily 'water_column_m' values") +
@@ -215,6 +197,8 @@ dcc.dly.mean %>% # names()
 
 ```
 
+DCC daily traces
+
 ```{r, fig.height=15}
 ## plot daily traces
 
@@ -238,8 +222,9 @@ dcc.dly.mean %>% # names()
 
 General strategy is to work backwards from 2019 as there innumerable 'appended' files. Maybe these capture data from earlier periods?
 
+
+```{r, echo=FALSE, eval=FALSE}
 ## File inventory:  *.wsl
-```{r}
 ## find WSL files
 files_all_wsl <- fs::dir_ls("./data/raw/WinSituData", recurse = TRUE, glob = "*.wsl") %>% 
   enframe() %>% 
@@ -248,15 +233,13 @@ files_all_wsl <- fs::dir_ls("./data/raw/WinSituData", recurse = TRUE, glob = "*.
   mutate(path = fs::path_dir(path_full)) %>% 
   mutate(file_name = fs::path_file(path_full))
 
-```
-
-There _many_ files. Some don't even seem to be from YELL (e.g. files from Sara Bisbing's AK work).
-```{r}
 files_all_wsl %>% 
   select(-path_full) %>% 
   datatable(caption = "All *.wsl files")
 #  A total shit show, as expected.
 ```
+
+There _many_ files. Some don't even seem to be from YELL (e.g. files from Sara Bisbing's AK work).
 
 ## Pull out Tower baro data
 
@@ -442,7 +425,7 @@ logger_raw2019.dly.baro <- left_join(logger_raw2019.dly, tow.baro.dly, by = "dat
 
 ```
 
-```{r}
+```{r, eval=FALSE}
 logger_raw2019.dly.baro %>% 
   visdat::vis_dat()
 
