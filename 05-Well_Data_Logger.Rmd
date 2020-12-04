@@ -292,18 +292,17 @@ tow.baro.dly <- tow.baro.dly %>%
 ```{r}
 ## plot baro data
 tow.baro.dly %>% 
-  filter(mmHg.mean < 620) %>% 
-  ggplot(aes(date, mmHg.mean)) +
+  # filter(mmHg.mean < 620) %>% 
+  ggplot(aes(date, baroTow_psi)) +
   geom_line(color = 'blue') +
   theme_minimal() +
-  labs(title = "Tower Baro daily trace", subtitle = "mean daily mm Hg", caption  = "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
+  labs(title = "Tower Baro daily trace", subtitle = "mean daily psi", caption  = "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
 
 tow.baro.dly %>% 
-  ggplot(aes(date, temp_c.mean)) +
+  ggplot(aes(date, baroTow_tempC)) +
   geom_line(color = 'red') +
   theme_minimal() +
   labs(title = "Tower Baro daily trace", subtitle = "mean daily temp_c", caption  = "TowerBarow_2011+_2019-09-10_11-01-36-258.csv")
-
 
 ```
 
@@ -314,7 +313,7 @@ Temps below -30 C seem highly questionable...
 
 ### Data import and initial inspection 
 
-```{r, eval=FALSE}
+```{r, echo=FALSE, eval=FALSE}
 ## find WSL files
 files2019wsl <- fs::dir_ls("./data/raw/WinSituData/Logger_Data_2019", recurse = TRUE, glob = "*.wsl") %>% 
   enframe() %>% 
@@ -353,7 +352,6 @@ files2019csv %>%
   distinct(file_name) %>%
   gt::gt() %>% 
   gt::tab_header(title = "Distinct csv files in the 2019 directory")
-
 
 # Pull out what appears to be the only baro file
 ```
@@ -711,24 +709,225 @@ logger_raw2018_19.dly.baro %>%
 
 I don't know where missing site data should be. Also, info on the specific well id and location is lacking, so not able to compare to manual well measurements. No notes on stick up or hang depth needed to further process the data. 
 
-## 2017 Data 
-### Data import and initial inspection 
+## There are other directories of files 
 
-
-## 2016 Data 
+There are several additional directories of files. Scraping these, but many are likely folded up in the DCC?
 
 ### Data import and initial inspection 
 
 ```{r}
+# the lack of data management on this project is ridiculous.
+
+# read directory for all exported logger files 
+# there's a crazy number of inconsistently entered fields. Nothing is clear.
+filesOther_csv <- fs::dir_ls("./data/raw/WinSituData/Exported Data", recurse = TRUE, glob = "*.csv")
+
+## make a tibble, rename
+filesOther_csv <- filesOther_csv %>% 
+  enframe() %>% 
+  rename(path_full = value) %>% 
+  select(-name)
+
+## add naked file name and naked path
+filesOther_csv <- filesOther_csv %>% 
+  mutate(path = fs::path_dir(path_full)) %>% 
+  mutate(file_name = fs::path_file(path_full)) 
+
+filesOther_csv %>%
+  distinct(file_name) %>% datatable()
+```
+
+In this directory alone, there are `r filesOther_csv %>% 
+  distinct(file_name) %>% nrow()` distinct csv files in the logger directory. 
+Examination of these files reveals that they're inconsistently structured. 
+
+```{r}
+## table of distinct file names
+filesOther_csv %>% 
+  distinct(file_name) %>%
+  gt::gt() %>% 
+  gt::tab_header(title = "Distinct csv files in the 'Exported Data' folder", subtitle = "A bunch of S$#T. There are files from Sara Bisbing, for God's sake")
+
+```
+
+```{r}
+## there are baromerged files. These have different columns
+
+## extract the baromerged
+filesOther_csv.baromrg <- filesOther_csv %>% 
+  filter(str_detect(file_name, "BaroMerge"))
+
+filesOther_csv.baromrg %>% 
+  distinct(file_name) %>% 
+  gt()
+
+
+
+```
+
+```{r}
+## exclude the baromerged
+filesOther_csv <- filesOther_csv %>% 
+  filter(!str_detect(file_name, "BaroMerge"))         
+## add some header info
+filesOther_csv <- filesOther_csv %>% 
+  mutate(import = map(.x = path_full, .f = read_csv, skip=100, col_names = c("date_time","seconds","psi","temp_c"))) %>% 
+  mutate(header = map(path_full, read_csv, skip = 0,
+  n_max = 10))
+
+## Munge: extract out info from file header
+filesOther_csv <- filesOther_csv %>% 
+  mutate(hdr_info = map(path_full, read_csv, skip =13,
+  n_max = 13, col_names = c("hdr_var","hdr_val"))) %>% 
+  unnest(hdr_info) %>% 
+  filter(!is.na(hdr_val) & !is.na(hdr_var)) %>%
+  filter(hdr_var == "Site" | hdr_var == "Serial Number") %>% 
+  pivot_wider(names_from = hdr_var, values_from = hdr_val) %>% 
+  clean_names() 
+```
+
+```{r, eval=FALSE}
+filesOther_csv %>%
+  pluck(5,3) %>% 
+  # head() %>% 
+  View()
+
+```
+
+> Attribute with the serial number and site from the header. Note: the site is as exists in the logger. Does not match format used elswhere, so more munging...
+
+```{r}
+## extract out the actual data
+logger_rawOther <- filesOther_csv %>%
+  unnest(import)
+
+```
+
+```{r, cache=TRUE}
+# select and attribute with the serial number and site from the header
+logger_rawOther <- logger_rawOther %>%
+  select(file_name,date_time, psi, temp_c, serial_number) %>% 
+  distinct() %>% 
+  mutate(date_time = anytime::anytime(date_time)) %>% 
+  mutate(date = date(date_time)) %>% 
+  mutate(yr = year(date_time))
+
+```
+
+> Distill to daily time step
+
+```{r}
+## create daily
+logger_rawOth.dly <- logger_rawOther %>% 
+  group_by(file_name,date, serial_number) %>% 
+  dplyr::summarise(psi.dly.mean = mean(psi, na.rm=TRUE), tempC.dly.mean = mean(temp_c, na.rm=TRUE)) %>%
+  ungroup() %>% 
+  distinct()
+
+```
+
+```{r}
+logger_rawOth.dly %>% 
+  mutate(yr = as.integer(year(date))) %>% 
+  group_by(file_name) %>% 
+  summarise(min.yr = min(yr), max.yr = max(yr)) %>% 
+  gt() %>% 
+  tab_header(title = "Most files in this batch do not have any 2016+ data")
+
+```
+
+Most this seems useless. It should be in the DCC if max year <=2015
+
+```{r}
+logger_rawOth.dly %>% 
+  mutate(yr = as.integer(year(date))) %>% 
+  group_by(file_name) %>% 
+  summarise(min.yr = min(yr), max.yr = max(yr)) %>% 
+  filter(max.yr >= 2016) %>% 
+  gt() %>% 
+  tab_header(title = "Only three files in this batch have any 2016+ data")
 
 ```
 
 
 
-## Clean and Combine Years
+```{r}
+
+rawOth.16.logger <- logger_rawOth.dly %>% 
+  filter(psi.dly.mean < 100) %>%
+  filter(date > '2016-01-01') 
+
+```
+
+```{r, eval=FALSE}
+rawOth.16.logger %>% 
+  distinct(file_name)
+
+```
+
+# >>
+```{r}
+# rawOth.16.logger %>% 
+#   names()
+
+rawOth.16.logger <- left_join(rawOth.16.logger, tow.baro.dly) 
+
+rawOth.16.logger <- rawOth.16.logger %>% 
+  mutate(site2 = case_when(grepl("Elk5", file_name, ignore.case = TRUE) ~ "elk5-obs",
+                                     TRUE ~ file_name))
+
+rawOth.16.logger <- rawOth.16.logger %>%
+  separate(site2, c("site","plot"),sep = "-", remove = FALSE)
+
+rawOth.16.logger <- rawOth.16.logger %>% 
+  mutate(psi.dif = psi.dly.mean-baroTow_psi) %>%
+  mutate(head_cm = psi.dif*0.70324961490205*100) %>% 
+  mutate(yr = as.integer(year(date)))
+
+```
+
+```{r}
+## bind with the 2018 and 2019 scrape
+logger.all <- bind_rows(rawOth.16.logger, logger_raw2018_19.dly.baro)
+
+# logger.all %>% 
+#   mutate(yr = as.integer(year(date))) %>% 
+#   visdat::vis_dat(warn_large_data = FALSE)
+
+```
+
+All that crap to net 500 records in 2016 for one site!
 
 ## QA plots
-```{r, eval=FALSE}
+```{r}
+logger.all %>%
+  ggplot(aes(date, head_cm)) +
+  geom_line(aes(color = serial_number)) +
+  facet_wrap(~yr, scales = "free")
+
+```
+
+```{r}
+logger.all %>%
+  group_by(serial_number, site, plot, yr) %>% 
+  tally() %>% 
+  ggplot(aes(yr, serial_number)) +
+  geom_tile(aes(fill = n), color = "white") +
+  facet_wrap(~site, scales = "free", ncol=2)
+
+```
+
+```{r}
+logger.all %>%
+  ggplot(aes(date, head_cm)) +
+  geom_line(aes(color = serial_number)) +
+  facet_wrap(~yr, scales = "free", ncol=2) +
+  theme_minimal() +
+  labs(caption = "combined scrape of all raw files")
+
+```
+
+```{r, echo=FALSE, eval=FALSE}
 # see https://aosmith.rbind.io/2018/08/20/automating-exploratory-plots/
 scatter_fun = function(x, y) {
      ggplot(dat, aes(x = .data[[x]], y = .data[[y]]) ) +
