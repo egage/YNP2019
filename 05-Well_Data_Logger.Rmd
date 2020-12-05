@@ -14,7 +14,7 @@ output:
 
 ```{r setup, include=FALSE}
 library(knitr)
-opts_chunk$set(echo = TRUE, warning = TRUE, message = FALSE, fig.align = 'center')
+opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'center')
 # opts_knit$set(root.dir=normalizePath('../')) # required if Rmd is nested below the project directory
 
 ```
@@ -58,7 +58,7 @@ library(gt)
 ```
 
 
-## 2012-2015 (DCC Collection)
+# 2012-2015 (DCC Collection)
 
 ### Data import and initial inspection 
 ```{r}
@@ -218,7 +218,7 @@ dcc.dly.mean %>% # names()
 
 ```
 
-# 2016-2019 files
+# Non-DCC 2016-2019 files
 
 General strategy is to work backwards from 2019 as there innumerable 'appended' files. Maybe these capture data from earlier periods?
 
@@ -241,7 +241,7 @@ files_all_wsl %>%
 
 There _many_ files. Some don't even seem to be from YELL (e.g. files from Sara Bisbing's AK work).
 
-## Pull out Tower baro data
+## Tower baro data
 
 In this list is the Tower baro data. Pull this out. I believe it should be used for correcting all the different site data? There seem to be no other baro files....
 
@@ -692,9 +692,10 @@ logger_raw2018_19.dly.baro %>%
 
 I don't know where missing site data should be. Also, info on the specific well id and location is lacking, so not able to compare to manual well measurements. No notes on stick up or hang depth needed to further process the data. 
 
-## There are other directories of files 
+## Misc other files 
 
-There are several additional directories of files. Scraping these, but many are likely folded up in the DCC?
+There are several additional directories of files. Scraping these for any data >2016. 
+Presume earlier data folded up in the DCC?
 
 ### Data import and initial inspection 
 
@@ -740,13 +741,15 @@ filesOther_csv %>%
 filesOther_csv.baromrg <- filesOther_csv %>% 
   filter(str_detect(file_name, "BaroMerge"))
 
+
+```
+
+```{r, eval=FALSE}
 filesOther_csv.baromrg %>% 
   distinct(file_name) %>% 
   gt()
-
-
-
 ```
+
 
 ```{r}
 ## exclude the baromerged
@@ -848,7 +851,7 @@ rawOth.16.logger %>%
 
 ```
 
-# >>
+
 ```{r}
 # rawOth.16.logger %>% 
 #   names()
@@ -935,6 +938,16 @@ elev_plots = map(expl, ~scatter_fun(.x, "elev") )
 
 ```
 
+There are gaps in data.
+
+```{r}
+## Export for Further Analysis
+
+```
 
 
-## Export Archivable Version of Cleaned Data for Further Analysis
+## Next steps
+
+> Find information (if it exists) on hang depths, stickups?
+
+> Where are loggers _supposed_ to be?
