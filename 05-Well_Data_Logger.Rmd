@@ -885,13 +885,28 @@ logger.all <- bind_rows(rawOth.16.logger, logger_raw2018_19.dly.baro)
 All that crap to net ~500 records in 2016 for one site!
 
 ## QA plots
-```{r}
+```{r, fig.width=6, fig.height=8}
 logger.all %>%
   ggplot(aes(date, head_cm)) +
   geom_line(aes(color = serial_number)) +
-  facet_wrap(~yr, scales = "free")
+  theme_minimal() +
+  facet_wrap(~yr, scales = "free", ncol = 2) +
+  labs(x="", y="Head (cm)", caption = "logger.all")
 
 ```
+
+```{r, fig.width=6, fig.height=10}
+logger.all %>%
+  mutate(doy = yday(date)) %>%
+  mutate(yr = as.factor(yr)) %>% 
+  ggplot(aes(doy, head_cm)) +
+  geom_line(aes(color = yr)) +
+  theme_minimal() +
+  facet_wrap(~serial_number, scales = "free", ncol = 2) +
+  labs(x="", y="Head (cm)", caption = "logger.all")
+
+```
+
 
 ```{r}
 logger.all %>%
@@ -938,7 +953,7 @@ elev_plots = map(expl, ~scatter_fun(.x, "elev") )
 
 ```
 
-There are gaps in data.
+There are gaps in data :)
 
 ```{r}
 ## Export for Further Analysis
@@ -952,9 +967,10 @@ There are gaps in data.
 
 > Where are loggers _supposed_ to be?
 
-The inherited state of orgnaization for the data logger was a mess. There are dozens upon dozens of partially overlapping and inconsistently named files to munge. The DCC data (the data that was added to the DCC library repository) are assumed to be as reliable as possible. I've come across raw files predating 2016 (the end of DCC data), but have ignored them, assuming the DCC is the most comprehensive record of these years. 
+The inherited state of organization for the data logger files was a mess. There are dozens upon dozens of partially overlapping and inconsistently named files to munge. The DCC data (the data that was added to the DCC library repository) are assumed to be as reliable as possible. 
+I've come across raw files predating 2016 (the end of DCC data), but have ignored them, assuming the DCC is the most comprehensive record of these years. 
 The code here also examines the dozens of raw files exported from the loggers and discovered while searching for data from shared dropbox/drive folders and DK hard drives. 
-DCC were processed to yield relative water table elevations (by DK), while newer files need correction for stickup/hang depth. These data are presumed to exist somewhere(?!) and are needed to evaluate possible errors in barometric corrections used from the sole barotroll (Tower) I found for the post-DCC period. 
+DCC were processed to yield relative water table elevations (by DK), while newer files need correction for stickup/hang depth. These data are presumed to exist somewhere(?!) and are needed to evaluate possible errors in barometric corrections used from the sole barotroll (Tower) I found for the post-DCC period. As already indicated, these data are raw and need connection to whatever field measurements were made (e.g., hang height, well stickup). 
+As a consequence I’ve exported these data separately along with some files to aid in the necessary detective work (probably Lewis who has access to whatever field notes exist and has site knowledge I lack).
+All csv files were uncorrected, so I correct these using barometric pressure data from the Tower barotroll. This is the only baro data I’ve found for the >2016 time period. Loggers vary in their start and logging interval, so to synchronize, I’ve reduced data down to a daily step. 
 
-These newer files, as already indicated, are raw and need connection to whatever field measurements were made (e.g., hang height, well stickup). As a consequence I’ve exported these data separately along with some files to aid in the necessary detective work (probably Lewis who has access to whatever field notes exist and has site knowledge I lack).
-These are all uncorrected, so I correct these using barometric pressure data from the Tower barotroll. This is the only baro data I’ve found for the >2016 time period. Loggers vary in their start and logging interval, so to synchronize, I’ve reduced data down to a daily step. 
