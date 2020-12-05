@@ -882,7 +882,7 @@ logger.all <- bind_rows(rawOth.16.logger, logger_raw2018_19.dly.baro)
 
 ```
 
-All that crap to net 500 records in 2016 for one site!
+All that crap to net ~500 records in 2016 for one site!
 
 ## QA plots
 ```{r}
@@ -951,3 +951,10 @@ There are gaps in data.
 > Find information (if it exists) on hang depths, stickups?
 
 > Where are loggers _supposed_ to be?
+
+The inherited state of orgnaization for the data logger was a mess. There are dozens upon dozens of partially overlapping and inconsistently named files to munge. The DCC data (the data that was added to the DCC library repository) are assumed to be as reliable as possible. I've come across raw files predating 2016 (the end of DCC data), but have ignored them, assuming the DCC is the most comprehensive record of these years. 
+The code here also examines the dozens of raw files exported from the loggers and discovered while searching for data from shared dropbox/drive folders and DK hard drives. 
+DCC were processed to yield relative water table elevations (by DK), while newer files need correction for stickup/hang depth. These data are presumed to exist somewhere(?!) and are needed to evaluate possible errors in barometric corrections used from the sole barotroll (Tower) I found for the post-DCC period. 
+
+These newer files, as already indicated, are raw and need connection to whatever field measurements were made (e.g., hang height, well stickup). As a consequence I’ve exported these data separately along with some files to aid in the necessary detective work (probably Lewis who has access to whatever field notes exist and has site knowledge I lack).
+These are all uncorrected, so I correct these using barometric pressure data from the Tower barotroll. This is the only baro data I’ve found for the >2016 time period. Loggers vary in their start and logging interval, so to synchronize, I’ve reduced data down to a daily step. 
