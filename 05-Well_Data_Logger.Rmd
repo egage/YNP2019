@@ -162,10 +162,10 @@ dcc.dly.mean <- dcc %>%
   summarise(mean.dly.abslevel = mean(abslevel,na.rm = TRUE), mean.water_column_m = mean(water_column_m, na.rm = TRUE), psi_logger = mean(press_psi, na.rm=TRUE),psi_baro = mean(bar_press_psi, na.rm=TRUE))
 
 dcc.dly.mean <- dcc.dly.mean %>% 
-  mutate(plot = case_when(str_detect(site, "cc") ~ "cc",
-                          str_detect(site, "dc") ~ "dc",
-                          str_detect(site, "dx") ~ "dx",
-                          str_detect(site, "cx") ~ "cx",
+  mutate(plot = case_when(str_detect(site2, "cc") ~ "cc",
+                          str_detect(site2, "dc") ~ "dc",
+                          str_detect(site2, "dx") ~ "dx",
+                          str_detect(site2, "cx") ~ "cx",
                           TRUE ~ "obs"))
 
 ## add in year and mob=nth columns
@@ -177,13 +177,14 @@ dcc.dly.mean <- dcc.dly.mean %>%
 
 ```
 
-```{r}
+```{r, eval=FALSE}
 ## some plots for QA
 dcc.dly.mean %>% 
-  mutate(mean.water_column_m = mean.water_column_m*-1) %>% 
+  mutate(mean.water_column_m = mean.water_column_m*-1) %>%
+  # distinct(plot)
   filter(plot != "obs") %>% 
   ggplot(aes(x=date,y=mean.water_column_m)) +
-  geom_line(color="blue") +
+  geom_line(aes(color=serial_number)) +
   geom_hline(yintercept = 0, color = "red", lty = "dashed") +
   labs(title = "DCC: Mean daily 'water_column_m' values") +
   facet_wrap(~site, ncol=2) +
@@ -198,7 +199,7 @@ dcc.dly.mean %>%
   ggplot(aes(x=date,y=mean.dly.abslevel)) +
   geom_line(color="blue") +
   labs(title = "DCC: Mean daily 'abslevel' values") +
-  facet_wrap(~site, scales = "free_y") +
+  facet_wrap(~serial_number, scales = "free_y") +
   theme_minimal() +
   labs(x = "Date", y = "Water table elevation (m)",caption = "mean.dly.abslevel = mean(abslevel,na.rm = TRUE)")
 
@@ -217,7 +218,7 @@ dcc.dly.mean %>% # names()
   geom_line(aes(color=yr)) +
   labs(x = "Day of year", y = "Water table elevation (m)") +
   # labs(title = "Mean daily 'water_column_m' values") +
-  facet_wrap(~site_logger, scale = 'free_y', ncol = 3) +
+  facet_wrap(~wat_id2, scale = 'free_y', ncol = 3) +
   theme_minimal()
 # ggsave("waterlevel_loggers_exp_alt2.png", width = 8.5, height = 6)
 
@@ -228,15 +229,14 @@ DCC daily traces
 ```{r, fig.height=15}
 ## plot daily traces
 
-dcc.dly.mean %>% # names()
+dcc.dly.mean %>%
   filter(plot != "obs") %>%
-  # filter(yr != "2012") %>% 
   filter(month > 2 & month < 10) %>% 
   mutate(yr = as.factor(yr)) %>% 
   ggplot(aes(x=doy,y=mean.dly.abslevel)) +
   geom_line(aes(color=yr)) +
   labs(x = "Day of year", y = "Water table elevation (m)") +
-  facet_wrap(~site_logger, scale = 'free_y', ncol = 2) +
+  facet_wrap(~site2, scale = 'free_y', ncol = 2) +
   theme_minimal()
 # ggsave("waterlevel_loggers_exp_alt2.png", width = 8.5, height = 6)
 
@@ -249,7 +249,6 @@ dcc.dly.mean %>%
   write_csv("./data/processed/data_loggers/dcc_logger_20201205.csv")
 
 ```
-
 
 # Non-DCC 2016-2019 files
 
@@ -763,7 +762,7 @@ Examination of these files reveals that they're inconsistently structured.
 filesOther_csv %>% 
   distinct(file_name) %>%
   gt::gt() %>% 
-  gt::tab_header(title = "Distinct csv files in the 'Exported Data' folder", subtitle = "A bunch of S$#T. There are files from Sara Bisbing, for God's sake")
+  gt::tab_header(title = "Distinct csv files in the 'Exported Data' folder", subtitle = "A bunch of S$#T. All older than DCC. There are even files from Sara Bisbing's AK project.")
 
 ```
 
@@ -776,13 +775,6 @@ filesOther_csv.baromrg <- filesOther_csv %>%
 
 
 ```
-
-```{r, eval=FALSE}
-filesOther_csv.baromrg %>% 
-  distinct(file_name) %>% 
-  gt()
-```
-
 
 ```{r}
 ## exclude the baromerged
@@ -990,6 +982,14 @@ logger.all <- logger.all %>%
 
 
 ## QA plots
+
+```{r}
+logger.all %>% 
+  visdat::vis_dat(warn_large_data = FALSE) +
+  labs(caption = "Combined DCC and other logger data")
+```
+
+
 ```{r, fig.width=7.5, fig.height=8}
 logger.all %>%
   ggplot(aes(date, head_cm)) +
@@ -1055,11 +1055,7 @@ logger.all %>%
 > Where are loggers _supposed_ to be?
 
 The inherited state of organization for the data logger files was a mess. There are dozens of partially overlapping and inconsistently named files to munge. The DCC data (the data that was added to the DCC library repository) are assumed to be reliable. 
+The code above scrapes data from raw logger files discovered while searching for data in the different shared dropbox/drive folders and DK hard drives. 
 
-I've come across raw files with records predating 2016 (the end of DCC data), but have excluded them, assuming the DCC captured them.
-
-The code scrapes data from raw files exported from the loggers and discovered while searching for data in the different shared dropbox/drive folders and DK hard drives. 
-
-DCC were processed to yield relative water table elevations (by DK), while newer files need correction for stickup/hang depth. These data are presumed to exist somewhere(?!) and are needed to evaluate possible errors in barometric corrections used from the sole barotroll (Tower) I found for the post-DCC period. As already indicated, these data are raw and need connection to whatever field measurements were made (e.g., hang height, well stickup). Combined data retains the file_name as an attribute to aid in the necessary detective work (probably Lewis who has access to whatever field notes exist and has site knowledge I lack).
-All csv files were uncorrected. Data were corrected using barometric pressure data from the Tower barotroll. This is the only baro data I’ve found for the >2016 time period. Loggers vary in their start and logging interval, so to synchronize, data were reduced to a daily step. 
-
+DCC were processed to yield relative water table elevations (by DK), while newer files need correction for stickup/hang depth. These data are presumed to exist somewhere and are needed to evaluate possible errors in barometric corrections used from the sole barotroll (Tower) I found for the post-DCC period. As already indicated, these data are raw and need connection to field measurements (e.g., hang height, well stickup). Combined data retain file_name as an attribute to aid in the necessary detective work using field notes.
+All csv files were uncorrected. Data were corrected using barometric pressure data from the Tower barotroll, the only baro data I’ve found for the >2016 time period. I did come across a logger at Mammoth, but data don't extend past the DCC data. Loggers vary in their start and logging interval, so to synchronize, data were reduced to a daily step. 
