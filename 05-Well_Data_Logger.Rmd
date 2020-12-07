@@ -19,17 +19,24 @@ opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'cente
 
 ```
 
+```{r, eval=TRUE, echo = TRUE}
+library(dplyr)
+files.csv <- fs::dir_ls("./data/raw/WinSituData", recurse = TRUE, glob = "*.csv") %>% 
+  length()
+```
+
 **Updated: `r format(Sys.time(), '%Y %B %d')`**
 
 ## Introduction
 
-This section provides basic QA/QC assessments for the well logger data.
+This document and code provides scrape data from the scattered well logger files, combines into a single analyzable file. In addition to the screening and merging of over `r files.csv`  files, the code conducts basic exploratory analyses of well logger data, primarily for further QA/QC.
 
-Analyses aim to characterize basic data structure and identify potential issues, clean data as needed, then produce an archive-worthy output data.
+The inherited state of organization for the data logger files was a mess. There are dozens of partially overlapping and inconsistently named files to munge. The DCC data (the data that was added to the DCC library repository) are assumed to be reliable. 
+The code crapes data from raw logger files discovered while searching for data in the different shared dropbox/drive folders and DK hard drives. 
 
-Because they originate as separate source files, 2016-2018 data are brought in and examined separately. 
+DCC were processed to yield relative water table elevations by D. Kotter, while newer files need correction for stickup/hang depth. These data are presumed to exist somewhere and are needed to evaluate possible errors in barometric corrections used from the sole barotroll (Tower) found for the post-DCC period. As indicated, these data are raw and need connection to field measurements (e.g., hang height, well stickup). Combined data retain file_name and serial number as attributes to aid in the necessary detective work using field notes.
 
-Data are cleaned to produce analyzable files for further analyses. 
+Loggers vary in their start and logging interval, so to synchronize, data were reduced to a daily step for export.
 
 ```{r,echo=FALSE}
 # library(here)
@@ -1001,6 +1008,18 @@ logger.all %>%
 
 ```
 
+```{r, fig.width=7.5, fig.height=8}
+qa.pl <- logger.all %>%
+  ggplot(aes(date, head_cm)) +
+  geom_point(aes(color = serial_number)) +
+  viridis::scale_color_viridis(discrete=TRUE) +
+  theme_minimal() +
+  facet_wrap(~yr, scales = "free", ncol = 2) +
+  labs(x="", y="Head (cm)", caption = "logger.all")
+plotly::ggplotly(qa.pl)
+```
+
+
 ```{r, fig.width=7.5, fig.height=10}
 logger.all %>%
   mutate(doy = yday(date)) %>%
@@ -1054,8 +1073,4 @@ logger.all %>%
 
 > Where are loggers _supposed_ to be?
 
-The inherited state of organization for the data logger files was a mess. There are dozens of partially overlapping and inconsistently named files to munge. The DCC data (the data that was added to the DCC library repository) are assumed to be reliable. 
-The code above scrapes data from raw logger files discovered while searching for data in the different shared dropbox/drive folders and DK hard drives. 
-
-DCC were processed to yield relative water table elevations (by DK), while newer files need correction for stickup/hang depth. These data are presumed to exist somewhere and are needed to evaluate possible errors in barometric corrections used from the sole barotroll (Tower) I found for the post-DCC period. As already indicated, these data are raw and need connection to field measurements (e.g., hang height, well stickup). Combined data retain file_name as an attribute to aid in the necessary detective work using field notes.
-All csv files were uncorrected. Data were corrected using barometric pressure data from the Tower barotroll, the only baro data I’ve found for the >2016 time period. I did come across a logger at Mammoth, but data don't extend past the DCC data. Loggers vary in their start and logging interval, so to synchronize, data were reduced to a daily step. 
+ 
