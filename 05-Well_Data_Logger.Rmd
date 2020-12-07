@@ -1008,17 +1008,33 @@ logger.all %>%
 
 ```
 
+> Interactive time series plot - Exp sites only
+
 ```{r, fig.width=7.5, fig.height=8}
-qa.pl <- logger.all %>%
+qa.pl.exp <- logger.all %>%
+  filter(plot != "obs") %>% 
   ggplot(aes(date, head_cm)) +
   geom_point(aes(color = serial_number)) +
   viridis::scale_color_viridis(discrete=TRUE) +
   theme_minimal() +
   facet_wrap(~yr, scales = "free", ncol = 2) +
   labs(x="", y="Head (cm)", caption = "logger.all")
-plotly::ggplotly(qa.pl)
+plotly::ggplotly(qa.pl.exp)
 ```
 
+> Interactive time series plot - Obs sites only
+
+```{r, fig.width=7.5, fig.height=8}
+qa.pl.obs <- logger.all %>%
+  filter(plot == "obs") %>% 
+  ggplot(aes(date, head_cm)) +
+  geom_point(aes(color = serial_number)) +
+  viridis::scale_color_viridis(discrete=TRUE) +
+  theme_minimal() +
+  facet_wrap(~yr, scales = "free", ncol = 2) +
+  labs(x="", y="Head (cm)", caption = "logger.all")
+plotly::ggplotly(qa.pl.obs)
+```
 
 ```{r, fig.width=7.5, fig.height=10}
 logger.all %>%
@@ -1029,7 +1045,7 @@ logger.all %>%
   viridis::scale_color_viridis(discrete=TRUE) +
   theme_minimal() +
   facet_wrap(~serial_number, scales = "free", ncol = 2) +
-  labs(x="", y="Head (cm)", caption = "logger.all+DCC")
+  labs(title = "Time series -- all logger data", x="", y="Head (cm)", caption = "logger.all+DCC")
 
 ```
 
