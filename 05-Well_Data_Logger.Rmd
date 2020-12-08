@@ -394,6 +394,9 @@ files2019csv <- files2019csv %>%
   mutate(header = map(path_full, read_csv, skip = 0,
   n_max = 10))
 
+```
+
+```{r}
 ## Munge: extract out info from file header
 files2019csv <- files2019csv %>% 
   mutate(hdr_info = map(path_full, read_csv, skip =13,
@@ -405,8 +408,8 @@ files2019csv <- files2019csv %>%
   pivot_wider(names_from = hdr_var, values_from = hdr_val) %>% 
   clean_names() %>% 
   mutate(site_hdr = site)
-
 ```
+
 
 Note: 'site_hdr' refers to the 'site' attribute recorded in the export file (i.e., it was entered in the logger).
 
@@ -427,7 +430,7 @@ logger_raw2019 <- files2019csv %>%
 
 ```
 
-```{r, cache=TRUE}
+```{r, cache=FALSE}
 # select and attribute with the serial number and site from the header
 logger_raw2019 <- logger_raw2019 %>%
   select(file_name,date_time, psi, temp_c, serial_number, site_hdr) %>% 
@@ -585,7 +588,7 @@ logger_raw2018 <- files2018csv %>%
 
 ```
 
-```{r, cache=TRUE}
+```{r, cache=FALSE}
 # select and attribute with the serial number and site from the header. Take a long time to process...
 logger_raw2018 <- logger_raw2018 %>%
   select(file_name,date_time, psi, temp_c, serial_number, site_hdr) %>% 
@@ -813,7 +816,7 @@ logger_rawOther <- filesOther_csv %>%
 
 ```
 
-```{r, cache=TRUE}
+```{r, cache=FALSE}
 # select and attribute with the serial number and site from the header
 logger_rawOther <- logger_rawOther %>%
   select(file_name,date_time, psi, temp_c, serial_number) %>% 
@@ -988,9 +991,9 @@ logger.all <- logger.all %>%
 ```
 
 
-## QA plots
+# Exploratory Analyses and QA
 
-```{r}
+```{r, eval=FALSE}
 logger.all %>% 
   visdat::vis_dat(warn_large_data = FALSE) +
   labs(caption = "Combined DCC and other logger data")
@@ -1017,7 +1020,7 @@ qa.pl.exp <- logger.all %>%
   geom_point(aes(color = serial_number)) +
   viridis::scale_color_viridis(discrete=TRUE) +
   theme_minimal() +
-  facet_wrap(~yr, scales = "free", ncol = 2) +
+  facet_wrap(~yr, scales = "free_y", ncol = 2) +
   labs(x="", y="Head (cm)", caption = "logger.all")
 plotly::ggplotly(qa.pl.exp)
 ```
@@ -1062,31 +1065,303 @@ logger.all %>%
 
 ```
 
-```{r}
+```{r, fig.width=7, fig.height=10}
 logger.all %>%
   ggplot(aes(date, head_cm)) +
   geom_line(aes(color = serial_number)) +
   facet_wrap(~yr, scales = "free", ncol=2) +
   theme_minimal() +
-  labs(caption = "combined scrape of all raw files + DCC")
+  theme(legend.position = "bottom") +
+  labs(caption = "combined scrape of all raw files + DCC") +
+  facet_wrap(~site, ncol=3)
 
 ```
 
+Some take homes:
 
-There are gaps in data :)
+> There are gaps in data
+
+> (Some) out of range values likely linked to when loggers deployed/read
+
+Calculating a z score for logger serial numbers and years. This is a pretty roug way to process.
+
+```{r}
+logger.all.clean <- logger.all %>% 
+  group_by(serial_number,yr) %>% 
+  mutate(z_score.bySerial = (psi_logger - mean(psi_logger)) / sd(psi_logger)) %>% 
+  ungroup() %>% 
+  mutate(flag.zscore = case_when(abs(z_score.bySerial) > 2 ~ "z>2")
+         )
+
+```
+
+```{r}
+logger.all.clean <- logger.all.clean %>% 
+  select(-c(tempC.dly.mean, psi.dif, mean.dly.abslevel)) 
+
+
+logger.all.clean %>% 
+  visdat::vis_dat(warn_large_data = FALSE)
+
+logger.all.clean %>%
+  filter(is.na(wat_id2)) %>% 
+  distinct(site)
+
+```
 
 
 ```{r, eval=FALSE}
-## Export for Further Analysis
-logger.all %>% 
-  write_csv("./data/processed/data_loggers/combined_dataloggers_20201205.csv")
+logger.all.clean %>% 
+  summarytools::descr(z_score.bySerial)
 
 ```
 
-## Next steps
+> z scores (by serial number and yr): all data
 
-> Find information (if it exists) on hang depths, stickups?
+```{r, fig.width=8, fig.height=8}
+## all data
+logger.all.clean %>% 
+  ggplot(aes(z_score.bySerial,serial_number)) +
+  geom_boxplot() +
+  facet_wrap(~yr) +
+  theme_minimal() +
+  labs(caption = "z scores (by serial number and yr): all records")
 
-> Where are loggers _supposed_ to be?
+```
 
+> z scores (by serial number and yr): |z-score| < 2
  
+```{r, fig.width=8, fig.height=10}
+logger.all.clean %>%
+  filter(is.na(flag.zscore)) %>% 
+  ggplot(aes(z_score.bySerial,serial_number)) +
+  geom_boxplot() +
+  facet_wrap(~yr) +
+  theme_minimal() +
+  labs(caption = "z scores (by serial number and yr): |z-score| < 2")
+
+```
+
+```{r, fig.width=8, fig.height=10}
+logger.all.clean %>%
+  filter(is.na(flag.zscore)) %>% 
+  ggplot(aes(date, head_cm)) +
+  geom_line(aes(color = serial_number)) +
+  facet_wrap(~yr, scales = "free", ncol=2) +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  labs(caption = "combined scrape of all raw files + DCC; z-score < 2") +
+  facet_wrap(~site, ncol=3)
+
+```
+
+```{r, eval=FALSE}
+## Export for Further Analysis
+logger.all.clean %>% 
+  write_csv("./data/processed/data_loggers/visdat::vis_dat(warn_large_data = FALSE)combined_dataloggers_20201207.csv")
+```
+
+
+```{r}
+## remove char from wat_id2 (e.g., "e5" > "5")
+# library(stringr)
+numextract <- function(string){ 
+  stringr::str_extract(string, "\\-*\\d+\\.*\\d*")
+} 
+
+## rename/munge to bind in manual
+logger.all.clean <- logger.all.clean %>%
+  mutate(wid = numextract(wat_id2)) %>% 
+  mutate(wid = as.character(wid))
+## wat_id2 was carried in from the logger side...
+```
+
+Before joining manual and logger datasets, need to figure out what to do with the sites in the logger data set lacking a well id (wat_id2 in the logger data set)...
+
+The following raw logger files/serial numbers lack a well ID. The well id (wat_id2) originated in the DCC. So these could have been new loggers or mis-attributed in the DCC. 
+I'll see if I can deduce their identity, but field notes would help!
+
+```{r}
+logger.all.clean %>% 
+  filter(is.na(wid)) %>% 
+  distinct(wid, file_name, serial_number) %>% 
+  gt() %>% 
+  tab_header(title = "Logger files with NA for well id (wid)")
+
+## create lu for anitjoin
+missing.wid.lu <- logger.all.clean %>% 
+  filter(is.na(wid)) %>% 
+  distinct(wid, file_name, serial_number)
+
+```
+
+```{r}
+### attributre missing wid for logger. I did some sluething.
+# No wb4 in the manaual well measurements, so attributed the wid as "wb4". The other missing wid were possible to fix.
+
+logger.all.clean <- logger.all.clean %>%
+  mutate(wid = case_when(is.na(wid) & str_detect(site,"elk5") ~ "40",
+                         is.na(wid) & str_detect(file_name,"WB4") ~ "wb4",
+                         is.na(wid) & str_detect(file_name,"Slough") ~ "40",
+         TRUE ~ wid))
+# add fullid for join with manual
+logger.all.clean <- logger.all.clean %>% 
+  mutate(fullid = paste0(site,"-",plot,"-",wid))
+
+# check
+# logger.all.clean %>% 
+#   filter(is.na(wid)) %>% 
+#   distinct(wid, file_name, serial_number) %>% 
+#   gt() %>% 
+#   tab_header(title = "Logger files with NA for well id (wid)")
+  
+```
+
+```{r, eval=FALSE}
+## Export for Further Analysis
+logger.all.clean %>% 
+  write_csv("./data/processed/data_loggers/combined_dataloggers_20201208.csv")
+
+```
+
+# Integrate manual well measurements
+
+The following code joins in manual well measurements, as processed from raw files in a different Rmd file. It's assumed loggers have fidelity to wells.  
+
+Source: ./data/processed/manual_well_data_raw_20201202.csv
+```{r}
+# read in manual measurement
+# This is the output of the manual well data Rmd that draws on the raw manual well data files
+mw.01.19 <- read_csv("./data/processed/manual_well_data_raw_20201202.csv")
+
+## type convert
+mw.01.19 <- mw.01.19 %>% 
+  mutate(wid = as.character(wid))
+
+# cleave off some columns for join
+mw.01.19 <- mw.01.19 %>% 
+  select(-c(yr, doy, mo, mday, site, plot, wid, site2))
+
+mw.01.19 <- mw.01.19 %>%
+  mutate(rwte = rwte*-1)
+
+```
+
+```{r}
+## join logger manual
+log.man <- left_join(logger.all.clean,mw.01.19, by = c("date","fullid"))
+```
+
+```{r, eval=TRUE}
+## clean and rename
+log.man <- log.man %>% 
+  select(-c(wat_id2, site_type)) %>%
+  rename(mw_su_cm = su_cm, mw_dtw_cm = dtw_cm, mw_rwte = rwte, mw_flag = flag) %>%
+  mutate(mw_flag = as.character(mw_flag)) 
+
+```
+
+```{r}
+log.man.coincident <- log.man %>%
+  filter(!is.na(mw_dtw_cm))
+
+# use SU from manual wells to calculate hang height and adjust head_cm from logger
+log.man.coincident <- log.man.coincident %>% 
+  mutate(hang.calc = mw_dtw_cm + head_cm) %>% 
+  mutate(rwte.calc = hang.calc-head_cm-mw_su_cm)
+
+## distill
+# log.man.hang.calc2join <- log.man.coincident %>%
+#   distinct(yr, fullid, hang.calc)
+log.man.hang.calc2join <- log.man.coincident %>%
+  distinct(serial_number, hang.calc)
+# log.man.hang.calc2join <- log.man.coincident %>%
+#   distinct(fullid, hang.calc)
+
+```
+
+The following table shows the coincident data in manual well measurements and loggers based on date and serial number
+
+```{r}
+log.man.coincident %>% 
+  datatable()
+
+```
+
+```{r}
+log.man.cor <- left_join(log.man, log.man.hang.calc2join, by = c("serial_number"))
+
+log.man.cor %>%
+  filter(file_name != "DCC") %>% 
+  filter(is.na(hang.calc)) %>% 
+  tabyl(site2, yr)
+
+log.man.cor <- log.man.cor %>% 
+  mutate(rwte.calc = hang.calc - head_cm) %>% 
+  mutate(rwte.calc = case_when(
+    is.na(rwte.calc) & !is.na(mw_rwte) ~ mw_rwte,
+    TRUE ~ rwte.calc
+  ))
+
+```
+
+
+```{r}
+log.man.cor %>% 
+  filter(is.na(rwte.calc)) %>% 
+  distinct(yr, site, serial_number) %>% 
+  arrange(serial_number) %>% 
+  datatable()
+
+log.man.cor %>% 
+  visdat::vis_dat(warn_large_data = FALSE)
+
+log.man.cor %>% 
+  filter(is.na(rwte.calc)) %>% 
+  distinct(file_name) %>% 
+  datatable()
+
+```
+
+
+```{r, eval=FALSE}
+# qa
+log.man %>% 
+  visdat::vis_dat(warn_large_data = FALSE)
+
+log.man %>% 
+  filter(str_detect(file_name,"Elk5|WB4|Slough") | is.na(wid)) %>% 
+  group_by(file_name, site,plot, serial_number, wid) %>% 
+  tally()
+
+```
+
+```{r, eval=FALSE}
+## qa
+log.man %>% 
+  filter(str_detect(site,"elk")) %>%
+  select(site, plot, wid) %>% 
+  distinct()
+
+log.man %>% 
+  filter(str_detect(site,"wb")) %>%
+  select(site, plot, wid) %>% 
+  distinct()
+
+log.man %>% 
+  filter(str_detect(site,"wb")) %>%
+  select(site, plot, wid) %>% 
+  distinct()
+
+```
+
+
+# Next steps
+
+> Find information (if it exists) on hang depths, stickups, etc. These are back-calculated but is based on assumptions best checked. In addition, there are missing 
+
+> Continue to filter out garbage 
+
+> Make spatial by incorporating coordinates
+
+
