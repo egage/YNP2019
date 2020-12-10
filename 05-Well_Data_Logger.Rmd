@@ -430,7 +430,7 @@ logger_raw2019 <- files2019csv %>%
 
 ```
 
-```{r, cache=FALSE}
+```{r, cache=TRUE}
 # select and attribute with the serial number and site from the header
 logger_raw2019 <- logger_raw2019 %>%
   select(file_name,date_time, psi, temp_c, serial_number, site_hdr) %>% 
@@ -588,7 +588,7 @@ logger_raw2018 <- files2018csv %>%
 
 ```
 
-```{r, cache=FALSE}
+```{r, cache=TRUE}
 # select and attribute with the serial number and site from the header. Take a long time to process...
 logger_raw2018 <- logger_raw2018 %>%
   select(file_name,date_time, psi, temp_c, serial_number, site_hdr) %>% 
@@ -991,6 +991,7 @@ logger.all <- logger.all %>%
 ```
 
 
+
 # Exploratory Analyses and QA
 
 ```{r, eval=FALSE}
@@ -1245,30 +1246,76 @@ mw.01.19 <- mw.01.19 %>%
 mw.01.19 <- mw.01.19 %>%
   mutate(rwte = rwte*-1)
 
+mw.01.19 <- mw.01.19 %>%
+  rename(mw_su_cm = su_cm, mw_dtw_cm = dtw_cm, mw_rwte = rwte, mw_flag = flag) %>%
+  mutate(mw_flag = as.character(mw_flag))
+
 ```
+
+
 
 ```{r}
 ## join logger manual
-log.man <- left_join(logger.all.clean,mw.01.19, by = c("date","fullid"))
+log.man <- left_join(logger.all.clean, mw.01.19, by = c("date","fullid"))
+
+log.man <- log.man %>% 
+  select(-c(wat_id2, site_type))
 ```
 
-```{r, eval=TRUE}
-## clean and rename
-log.man <- log.man %>% 
-  select(-c(wat_id2, site_type)) %>%
-  rename(mw_su_cm = su_cm, mw_dtw_cm = dtw_cm, mw_rwte = rwte, mw_flag = flag) %>%
-  mutate(mw_flag = as.character(mw_flag)) 
+```{r, eval=FALSE}
+### qa
+logger.all.clean %>% visdat::vis_dat(warn_large_data = FALSE) +
+  labs(title = "logger.all.clean")
+  
+
+mw.01.19 %>% visdat::vis_dat(warn_large_data = FALSE) +
+  labs(title = "mw.01.19")
+
+mw.01.19 %>% filter(is.na(mw_dtw_cm))
+
+log.man %>% visdat::vis_dat(warn_large_data = FALSE) +
+  labs(title = "log.man")
 
 ```
 
 ```{r}
 log.man.coincident <- log.man %>%
-  filter(!is.na(mw_dtw_cm))
+  filter(!is.na(mw_rwte))
+```
 
+```{r}
+
+
+log.man.coincident %>% 
+  select(file_name, yr, serial_number, site2, head_cm, mw_su_cm, mw_rwte) %>% 
+  distinct() %>% datatable()
+
+```
+
+```{r}
 # use SU from manual wells to calculate hang height and adjust head_cm from logger
+
+# !!! fore records without su, assuming rwte + head = hang height
+
 log.man.coincident <- log.man.coincident %>% 
-  mutate(hang.calc = mw_dtw_cm + head_cm) %>% 
-  mutate(rwte.calc = hang.calc-head_cm-mw_su_cm)
+  # mutate(hang.calc = mw_dtw_cm + head_cm) %>%
+  mutate(hang.calc = case_when(
+    !is.na(mw_dtw_cm) ~ (mw_dtw_cm + head_cm),
+    is.na(mw_dtw_cm) ~ (mw_rwte + head_cm)))
+
+log.man.coincident <- log.man.coincident %>% 
+  mutate(rwte.calc = case_when(
+    !is.na(mw_su_cm) ~ (hang.calc-head_cm-mw_su_cm),
+    is.na(mw_su_cm) ~ (hang.calc-head_cm)))
+  # mutate(rwte.calc = hang.calc-head_cm-mw_su_cm)
+
+log.man.coincident %>% visdat::vis_dat(warn_large_data = FALSE) +
+  labs(title = "log.man.coincident")
+
+# #
+# log.man.coincident %>% 
+#   select(hang.calc, hang.calc) %>% 
+#   datatable()
 
 ## distill
 # log.man.hang.calc2join <- log.man.coincident %>%
@@ -1278,7 +1325,9 @@ log.man.hang.calc2join <- log.man.coincident %>%
 # log.man.hang.calc2join <- log.man.coincident %>%
 #   distinct(fullid, hang.calc)
 
+# dplyr::anti_join(logger.all.clean, log.man.hang.calc2join, by = "serial_number") %>% View()
 ```
+
 
 The following table shows the coincident data in manual well measurements and loggers based on date and serial number
 
@@ -1288,6 +1337,11 @@ log.man.coincident %>%
 
 ```
 
+## Estimate RWTE
+
+Calculate hang height from head, su, and dtwt data. The code creates a flag field denoting whether a rwte calculated has info for hang height for that date or is estimated using past data and 0 su (applicable to SG?). **Hang heights from field forms (if they exist) should be brought it**
+
+
 ```{r}
 log.man.cor <- left_join(log.man, log.man.hang.calc2join, by = c("serial_number"))
 
@@ -1296,39 +1350,132 @@ log.man.cor %>%
   filter(is.na(hang.calc)) %>% 
   tabyl(site2, yr)
 
+## create flag denoting whether a rwte calculated has info for hang height. Otherwise estimated using past data and 0 su (applicable to SG?). **Hang heights from field forms (if they exist) should be brought it**
+
 log.man.cor <- log.man.cor %>% 
-  mutate(rwte.calc = hang.calc - head_cm) %>% 
-  mutate(rwte.calc = case_when(
-    is.na(rwte.calc) & !is.na(mw_rwte) ~ mw_rwte,
-    TRUE ~ rwte.calc
-  ))
+  mutate(rwte.calc = hang.calc - head_cm) %>%
+  mutate(flag_hanght = case_when(!is.na(rwte.calc) ~ "estimated")) %>% 
+  mutate(rwte.calc = case_when(is.na(rwte.calc) & !is.na(mw_rwte) ~ mw_rwte,
+    TRUE ~ rwte.calc))
+  # mutate(rwte.calc = case_when(
+  #   is.na(rwte.calc) & !is.na(mw_rwte) ~ mw_rwte,
+  #   TRUE ~ rwte.calc
+  # ))
+
+
+```
+
+
+## sg/well attribution
+```{r}
+## add lu from the "Well_Data.shp" file in the "geospatial" directory
+
+lu_wat_id2 <- read_csv("./data/processed/lu_well_wat_id2_from_shape.csv")
+
+logger.all %>% 
+  distinct(wat_id2)
+
+try <- left_join(logger.all,lu_wat_id2, by = "wat_id2")
+
+try %>% 
+  filter(is.na(type)) %>% 
+  distinct(file_name, site, plot, wat_id2)
+
+# I don't know for many of these which are sg vs wells
+```
+
+# >!
+
+
+#>>
+```{r}
+## plotting functions
+library(rlang)
+
+# gg.tile <- function(mydf, myxcol, myycol, fill, mytitle, caption) {
+#    ggplot2::ggplot(data = mydf, aes(x=reorder({{ myxcol }}, 
+#       {{ myycol }}), y= {{ myycol }})) +
+#     geom_tile(color = "black", fill="#0072B2") +
+#     xlab("") +
+#     ylab("") +
+#     coord_flip() +
+#     ggtitle(mytitle) +
+#     labs(caption = caption) +
+#     theme_minimal()   +
+#     theme(plot.title=element_text(size=24))
+# }
+
+### 
+gg.tile <- function(mydf, myxcol, myycol, fill, mytitle, caption) {
+   ggplot2::ggplot(data = mydf, aes(x=reorder({{ myxcol }}, 
+      {{ myycol }}), y= {{ myycol }})) +
+    geom_tile(aes(fill = {{ fill }}), color = "grey") +
+    xlab("") +
+    ylab("") +
+    ggtitle(mytitle) +
+    labs(caption = caption) +
+    theme_minimal()   +
+    theme(plot.title=element_text(size=14))
+}
+
+## faceting version
+gg.tile.facwr <- function(mydf, myxcol, myycol, fill, facetvar, mytitle, caption) {
+   ggplot2::ggplot(data = mydf, aes(x=reorder({{ myxcol }}, 
+      {{ myycol }}), y= {{ myycol }})) +
+    geom_tile(aes(fill = {{ fill }}), color = "grey") +
+    ggtitle(mytitle) +
+    labs(caption = caption) +
+    facet_wrap(~{{ facetvar }}) +
+    theme_minimal()   +
+    theme(plot.title=element_text(size=14))
+}
+
+```
+
+```{r}
+#### apply tile fun
+## qaqc
+log.man.cor %>% 
+  filter(is.na(rwte.calc)) %>% 
+  group_by(file_name, yr) %>% 
+  tally() %>% 
+  gg.tile(mydf = .,myxcol = file_name,myycol = yr, fill = n,mytitle = "",caption = "Missing rwte.calc records. combined logger/mw")
+
+log.man.cor %>% 
+  filter(is.na(rwte.calc)) %>% 
+  group_by(serial_number, site, yr) %>% 
+  tally() %>%
+  gg.tile(mydf = .,myxcol = yr, myycol = serial_number, fill = n, mytitle = "",caption = "Missing rwte.calc records. combined logger/mw")
+
+```
+
+```{r}
+log.man.cor %>% 
+  # filter(is.na(rwte.calc)) %>%
+  group_by(serial_number, site, yr) %>% 
+  tally() %>%
+  gg.tile(mydf = .,myxcol = yr, myycol = serial_number, fill = n, mytitle = "",caption = "All records. combined logger/mw")
 
 ```
 
 
 ```{r}
 log.man.cor %>% 
-  filter(is.na(rwte.calc)) %>% 
-  distinct(yr, site, serial_number) %>% 
-  arrange(serial_number) %>% 
-  datatable()
+  group_by(file_name, site, plot, yr) %>% 
+  summarytools::descr(rwte.calc, stats = c("mean", "min", "max")) %>% 
+  summarytools::tb() %>% 
+  datatable(caption = "Summary stats: rwte.calc")
+```
 
+```{r}
 log.man.cor %>% 
-  visdat::vis_dat(warn_large_data = FALSE)
-
-log.man.cor %>% 
-  filter(is.na(rwte.calc)) %>% 
-  distinct(file_name) %>% 
-  datatable()
-
+  visdat::vis_dat(warn_large_data = FALSE) +
+  labs(caption = "Combined logger and manual well data")
 ```
 
 
 ```{r, eval=FALSE}
 # qa
-log.man %>% 
-  visdat::vis_dat(warn_large_data = FALSE)
-
 log.man %>% 
   filter(str_detect(file_name,"Elk5|WB4|Slough") | is.na(wid)) %>% 
   group_by(file_name, site,plot, serial_number, wid) %>% 
@@ -1340,11 +1487,6 @@ log.man %>%
 ## qa
 log.man %>% 
   filter(str_detect(site,"elk")) %>%
-  select(site, plot, wid) %>% 
-  distinct()
-
-log.man %>% 
-  filter(str_detect(site,"wb")) %>%
   select(site, plot, wid) %>% 
   distinct()
 
