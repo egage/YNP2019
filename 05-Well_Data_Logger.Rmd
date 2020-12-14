@@ -19,7 +19,7 @@ opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'cente
 
 ```
 
-```{r, eval=TRUE, echo = TRUE}
+```{r, eval=TRUE, echo = FALSE}
 library(dplyr)
 files.csv <- fs::dir_ls("./data/raw/WinSituData", recurse = TRUE, glob = "*.csv") %>% 
   length()
