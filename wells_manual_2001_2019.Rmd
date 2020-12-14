@@ -20,7 +20,7 @@ opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'cente
 
 ## Introduction  
 
-This document describes data import, wrangling, and merging of manual well measurements collected over the project lifetime. Three primary data sets are processed: 
+This document provides code for data import, wrangling, and merging of manual well measurements collected over the project lifetime. Three primary data sets are processed: 
 
 1. Manual well measurement data archived on the "Digital Collections of Colorado" (DCC) library site: [Well Measurement Data 2001 - 2015](https://dspace.library.colostate.edu/handle/10217/176158). The assumption was that the DCC data set represents the canonical version of the water table data, to which updates from 2015-2019 should be added. However, there are errors in the DCC repository that also need to be addressed before attempting to update with more recent data.
 
