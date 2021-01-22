@@ -537,14 +537,41 @@ wt.nsf <- wt.nsf %>%
 
 ```
 
+```{r}
+# make site and site2 consistent with use elsewhere (i.e invert)
+wt.nsf <- wt.nsf %>%
+  rename(sitex = site) %>% 
+  rename(site = site2, site2=sitex)
+
+wt.nsf %>% 
+  distinct(site2,wat_id,wat_id2,wat_type, x, y, z) %>% 
+  # filter(!is.na(x)) %>%
+  filter(x == 999 | is.na(x)) %>%
+  gt() %>% 
+  tab_header(title = "DCC records lacking coordinates")
+
+```
+
+```{r, eval=FALSE}
+## write_to_disk
+wt.nsf %>%
+  write_csv("./data/processed/manual_well_data_DCC.csv")
+
+```
+
 
 ```{r}
-#### filter out sg
+
 wt.nsf %>% 
   tabyl(wat_type)
-
+#### filter out sg
 wt.nsf <- wt.nsf %>%
   filter(wat_type == 1)
+
+```
+
+```{r}
+
 
 ```
 
@@ -1464,6 +1491,13 @@ sel.01.19.summary %>%
 ```
 
 
+```{r}
+# sel.01.19 %>% 
+#   distinct(site, site_general) %>% 
+#   View()
+```
+
+
 ## Export
 
 Create csv of combined manual water table measurements (existing warts and all).
@@ -1475,13 +1509,14 @@ sel.01.19 <- sel.01.19 %>%
   distinct()
 
 sel.01.19 %>%
-  write_csv("./data/processed/manual_well_data_raw_20201202.csv")
+  write_csv("./data/processed/manual_well_data_raw_20201217.csv")
 
 ```
 
-**Summarized**
 
-```{r, eval= FALSE}
+
+```{r, echo=FALSE, eval= FALSE}
+# **Summarized**
 sel.01.19.summary %>%
   write_csv("./output/processed_data/manual_WTD_site_mean_20201201.csv")
 

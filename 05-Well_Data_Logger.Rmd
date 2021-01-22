@@ -1,15 +1,8 @@
 ---
 title: "Well Data Logger Processing Report"
-output:
-  html_document: 
-    fig_caption: yes
-    fig_height: 8
-    number_sections: no
-    theme: journal
-    toc: yes
-    toc_depth: 2
-    toc_float: yes
-  word_document: default
+author: ""
+date: ""
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -32,6 +25,9 @@ files.csv <- fs::dir_ls("./data/raw/WinSituData", recurse = TRUE, glob = "*.csv"
 This document and code provides scrape data from the scattered well logger files, combines into a single analyzable file. In addition to the screening and merging of over `r files.csv`  files, the code conducts basic exploratory analyses of well logger data, primarily for further QA/QC.
 
 The inherited state of organization for the data logger files was a mess. There are dozens of partially overlapping and inconsistently named files to munge. The DCC data (the data that was added to the DCC library repository) are assumed to be reliable. 
+
+DCC URL: <https://mountainscholar.org/handle/10217/195563>
+
 The code crapes data from raw logger files discovered while searching for data in the different shared dropbox/drive folders and DK hard drives. 
 
 DCC were processed to yield relative water table elevations by D. Kotter, while newer files need correction for stickup/hang depth. These data are presumed to exist somewhere and are needed to evaluate possible errors in barometric corrections used from the sole barotroll (Tower) found for the post-DCC period. As indicated, these data are raw and need connection to field measurements (e.g., hang height, well stickup). Combined data retain file_name and serial number as attributes to aid in the necessary detective work using field notes.
