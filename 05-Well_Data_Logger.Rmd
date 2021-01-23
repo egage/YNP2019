@@ -296,6 +296,7 @@ dcc.dly.mean %>%
 ```{r, eval=FALSE}
 ### Export munged DCC data
 dcc.dly.mean %>% 
+  clean_names() %>% 
   write_csv("./data/processed/data_loggers/dcc_logger_20201205.csv")
 
 ```
@@ -1058,7 +1059,7 @@ logger.all %>%
 ```{r, fig.width=7.5, fig.height=8}
 qa.pl.exp <- logger.all %>%
   filter(plot != "obs") %>% 
-  ggplot(aes(date, head_cm)) +
+  ggplot(aes(doy.d, head_cm)) +
   geom_point(aes(color = serial_number)) +
   viridis::scale_color_viridis(discrete=TRUE) +
   theme_minimal() +

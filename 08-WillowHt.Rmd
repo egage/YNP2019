@@ -27,7 +27,9 @@ opts_chunk$set(echo = TRUE, warning = TRUE, message = FALSE, fig.align = 'center
 This document evaluates willow height measurement data from project inception through 2019. Data include those archived on the "Digital Collections of Colorado" (DCC) library site and more recent (2015-2019) data.
 
 DCC links:
-Plant level fall current annual growth and height on experimental plots in Yellowstone's Northern Range, 2002 - 2015: <http://hdl.handle.net/10217/173649>\
+
+Plant level fall current annual growth and height on experimental plots in Yellowstone's Northern Range, 2002 - 2015: <http://hdl.handle.net/10217/173649>
+
 Plant level fall current annual growth and height on observation plots in Yellowstone's Northern Range, 2008 - 2015: <http://hdl.handle.net/10217/173657>
 
 ```{r,echo=FALSE}

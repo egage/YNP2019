@@ -1088,6 +1088,12 @@ wt.nsf %>%
 
 ```
 
+```{r, eval=FALSE}
+# write the DCC to for Erin
+wt.nsf %>% 
+  write_csv("./data/processed/manual_well_data_raw_DCConly_20210122.csv")
+
+```
 
 
 ```{r}
@@ -1099,7 +1105,7 @@ wt.nsf <- wt.nsf %>%
 ```
 
 ```{r}
-## extract out the coordiates
+## extract out the coordinates
 well.coord <- wt.nsf %>%
   dplyr::select(fullid, x,y,z) %>%
   distinct() # looks fu
