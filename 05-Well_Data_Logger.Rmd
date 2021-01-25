@@ -1379,6 +1379,8 @@ log.man.coincident %>%
 
 ```
 
+
+
 ## Estimate RWTE
 
 Calculate hang height from head, su, and dtwt data. The code creates a flag field denoting whether a rwte calculated has info for hang height for that date or is estimated using past data and 0 su (applicable to SG?). **Hang heights from field forms (if they exist) should be brought it**
@@ -1407,6 +1409,12 @@ log.man.cor <- log.man.cor %>%
 
 ```
 
+```{r, eval=FALSE}
+# write coincident
+log.man.coincident %>%
+  clean_names() %>% 
+  write_csv("./data/processed/data_loggers/logger_manual_coincident_20210123.csv")
+```
 
 
 ```{r}
