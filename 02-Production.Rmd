@@ -56,7 +56,7 @@ library(kableExtra)
 suppressPackageStartupMessages(library(lubridate))
 library(anytime)
 suppressPackageStartupMessages(library(compare))
-suppressPackageStartupMessages(library(skimr)) ## some useful functions
+suppressPackageStartupMessages(library(skimr))
 suppressPackageStartupMessages(library(dataMaid))
 library(gt)
 
@@ -66,7 +66,7 @@ library(gt)
 ### Shoot level spring current annual growth 
 #### 2003-2015 (DCC Collection)
 
-Data are in seprate directories and files
+Data are in separate directories and files
 * Experimental  
 
 ```{r}
@@ -964,10 +964,6 @@ for (i in 1:length(willow.levels)){
 }
     
 
-
-
-
-
 ######################################
 # calculate fall CAG USING SHOOT REGRESSIONS
 ######################################
@@ -979,8 +975,6 @@ fdata=fdata[is.na(fdata$willid)==F & is.na(fdata$shtmeas)==F & fdata$shtmeas!=0,
 
 
 # 1. convert individual shoot lengths to mass (log transform!!!)
-
-
 fdata$logshtmeas=log(fdata$shtmeas)
 fdata$logweight[fdata$lendiam=="lengths"]=-5.79+1.53*fdata$logshtmeas[fdata$lendiam=="lengths"]
 fdata$logweight[fdata$lendiam=="diameters"]=-3.79+3.03*fdata$logshtmeas[fdata$lendiam=="diameters"]
@@ -1310,5 +1304,3 @@ dim(BIdata)
 write.table(BIdata,"OBSwillows-plantBI2009-2013.txt",row.names=F,quote=F)
 
 ```
-
-
